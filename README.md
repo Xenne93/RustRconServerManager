@@ -119,8 +119,8 @@ companion app are distributed separately from this repo, not bundled here.
 
 ## License
 
-This project is licensed under the [Business Source License 1.1](LICENSE.md): free to
-self-host and use, including commercially, but you may not offer it as a competing
-hosted/managed service without a separate commercial agreement, and any deployment
-must keep visible attribution back to this project. It converts to Apache 2.0 on the
-date specified in `LICENSE.md`.
+This project is source-available under the [Business Source License 1.1](LICENSE.md) - not
+an OSI-approved open source license. It's free to self-host and use, including
+commercially, but you may not offer it as a competing hosted/managed service without a
+separate commercial agreement, and any deployment must keep visible attribution back to
+this project. It converts to Apache 2.0 on the date specified in `LICENSE.md`.
