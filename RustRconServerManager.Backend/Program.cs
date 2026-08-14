@@ -233,6 +233,16 @@ catch (Exception ex)
     throw;
 }
 
+// `--reset-password` runs an interactive terminal password reset instead of starting the
+// web server - for admins locked out with no working SMTP configuration for the email-code
+// "forgot password" flow. Exits here (before Kestrel would bind a port) so it can safely
+// run as a second process alongside an already-running instance sharing the same database.
+if (args.Contains("--reset-password"))
+{
+    var exitCode = await RustRconServerManager.Backend.Cli.ResetPasswordCli.RunAsync(app.Services);
+    Environment.Exit(exitCode);
+}
+
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>

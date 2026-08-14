@@ -77,8 +77,10 @@ jobs:
       - name: Add standalone launcher
         run: |
           cp standalone/start.sh ./publish/linux/start.sh
+          cp standalone/reset-password.sh ./publish/linux/reset-password.sh
           cp standalone/README.md ./publish/linux/README.md
           chmod +x ./publish/linux/start.sh
+          chmod +x ./publish/linux/reset-password.sh
           chmod +x ./publish/linux/app/RustRconServerManager.Backend
           echo "v${{ needs.check-release.outputs.version }}" > ./publish/linux/app/.version
 
@@ -128,6 +130,8 @@ jobs:
         run: |
           Copy-Item standalone/start.bat ./publish/windows/start.bat
           Copy-Item standalone/start.ps1 ./publish/windows/start.ps1
+          Copy-Item standalone/reset-password.bat ./publish/windows/reset-password.bat
+          Copy-Item standalone/reset-password.ps1 ./publish/windows/reset-password.ps1
           Copy-Item standalone/README.md ./publish/windows/README.md
           Set-Content -Path ./publish/windows/app/.version -Value "v${{ needs.check-release.outputs.version }}" -NoNewline
 

@@ -80,6 +80,19 @@ docker compose exec -T mariadb sh -c 'exec mysql -u root -p"$MARIADB_ROOT_PASSWO
 docker compose exec mariadb mysql -u ${DB_USER} -p ${DB_NAME}
 ```
 
+## Password Reset
+
+If an admin is locked out and `SMTP_*` isn't configured (or you'd rather not depend on
+email), reset the account's password directly from the terminal:
+
+```bash
+docker compose exec app /app/RustRconServerManager.Backend --reset-password
+```
+
+This prompts for the account's email address and a new password, then signs out any
+existing sessions for that account. The container must already be running - the command
+reuses its existing database connection rather than starting a second one.
+
 ## Running behind a reverse proxy
 
 Set `PATHBASE=/panel` (or whatever prefix you want) in `.env` and configure your reverse proxy
