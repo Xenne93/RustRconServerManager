@@ -24,6 +24,7 @@ builder.Services.AddScoped<ServerValidationHelper>();
 builder.Services.AddScoped<NavigationHelper>();
 builder.Services.AddScoped<PageAccessService>();
 builder.Services.AddScoped<ServerStateService>();
+builder.Services.AddScoped<ThemeService>();
 
 builder.Services.AddScoped(sp =>
 {

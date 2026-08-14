@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
     <meta name="theme-color" content="#f97316">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="dark light">
     <title>Dashboard - Rust RCON Server Manager</title>
     <base href="/" />
 
@@ -16,9 +16,14 @@
     <link rel="stylesheet" href="/css/tailwind-output.css">
     <link rel="stylesheet" href="/css/app.css">
     <link rel="icon" href="/favicon.png" type="image/png">
+
+    <!-- Applies the stored/preferred theme before first paint, to avoid a flash of the
+         wrong theme. Must run synchronously in <head>, before Blazor (or anything else)
+         has a chance to render. -->
+    <script src="/js/theme.js"></script>
 </head>
 
-<body id="page-top" class="bg-[#0f0f17] text-slate-200">
+<body id="page-top" class="bg-[rgb(var(--body-bg))] text-slate-200">
 <div id="app">
     <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
         <div class="tw-spinner" style="width: 40px; height: 40px;"></div>

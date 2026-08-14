@@ -1,5 +1,6 @@
 @using RustRconServerManager.Shared.ManageServers
 @using RustRconServerManager.Frontend.Services
+@using RustRconServerManager.Frontend.Components
 @using RustRconServerManager.Frontend.Components.UI
 @inject HttpClient Http
 @inject NavigationManager Nav
@@ -8,7 +9,7 @@
 @implements IDisposable
 
 @* Top Navbar - Fixed, full width *@
-<header class="fixed top-0 left-0 right-0 z-50 h-16 border-b border-slate-800/50 bg-[#0f0f17]/80 backdrop-blur-xl">
+<header class="fixed top-0 left-0 right-0 z-50 h-16 border-b border-slate-800/50 bg-[rgb(var(--body-bg)/80%)] backdrop-blur-xl">
     <div class="flex items-center justify-between h-full px-4 lg:px-6">
         @* Left: Logo & Mobile menu *@
         <div class="flex items-center gap-4">
@@ -110,6 +111,8 @@
                 <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full"></span>
             </button>
             *@
+
+            <ThemeSwitcher />
 
             <TwDropdown Align="right">
                 <TriggerContent>
