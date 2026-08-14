@@ -5,6 +5,9 @@ management, bans, scheduling/automation, Discord webhooks, and server protection
 (VPN/VAC/whitelist checks). Runs entirely on your own infrastructure, no external
 service required.
 
+> **Work in progress**: this panel is under active development. Features can be added,
+> changed, or removed between releases.
+
 ## Features
 
 - **Live console & chat** over RCON, via SignalR, for one or many Rust servers from one panel
