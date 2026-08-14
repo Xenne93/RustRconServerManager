@@ -375,32 +375,6 @@ public class PanelSettingsController : ControllerBase
     }
 
     /// <summary>
-    /// Server/player/user counts sent as a custom analytics event - only ever called by
-    /// the frontend when analytics is enabled. No SteamIDs, emails, or other identifiable
-    /// data - just counts.
-    /// </summary>
-    [HttpGet("analytics-snapshot")]
-    public async Task<ActionResult<AnalyticsSnapshotDto>> GetAnalyticsSnapshot()
-    {
-        var currentUser = await User.GetUser(_dbContext);
-
-        var serverIds = await _dbContext.RconServers
-            .Where(s => s.SystemProfileId == currentUser.SystemProfileId)
-            .Select(s => s.Id)
-            .ToListAsync();
-
-        var playerCount = await _dbContext.SteamPlayers.Where(p => serverIds.Contains(p.ServerId)).CountAsync();
-        var userCount = await _dbContext.Users.Where(u => u.SystemProfileId == currentUser.SystemProfileId).CountAsync();
-
-        return Ok(new AnalyticsSnapshotDto
-        {
-            Servers = serverIds.Count,
-            Players = playerCount,
-            Users = userCount
-        });
-    }
-
-    /// <summary>
     /// Lists all developer-mode fake VAC-ban overrides.
     /// </summary>
     [HttpGet("developer/vac-overrides")]

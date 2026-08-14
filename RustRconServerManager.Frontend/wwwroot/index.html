@@ -114,13 +114,6 @@
             }).catch(function () { });
         } catch (e) { }
     }
-
-    // Called by the authenticated app - it checks analytics-status itself (via the
-    // backend, authoritatively) before ever calling this, so no need to re-check here.
-    // Aggregate counts only - no SteamIDs, emails, or other identifiable data.
-    window.sendAnalyticsSnapshot = function (players, servers, users) {
-        sendPlausibleEvent('server-stats', { players: players, servers: servers, users: users });
-    };
 </script>
 </body>
 

@@ -55,6 +55,13 @@ public class PanelSettings
     public bool AnalyticsEnabled { get; set; } = false;
 
     /// <summary>
+    /// When AnalyticsReportingService last successfully sent the daily anonymous usage
+    /// check-in. Persisted (rather than tracked only in memory) so the 24-hour cadence
+    /// survives restarts instead of restarting the clock every time the app boots.
+    /// </summary>
+    public DateTime? LastAnalyticsSentAt { get; set; }
+
+    /// <summary>
     /// When the settings were created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
