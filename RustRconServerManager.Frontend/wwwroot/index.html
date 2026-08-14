@@ -80,6 +80,37 @@
         console.log('[Migration] activateTab called for', tabId, '- use TwTabs component instead');
     };
 </script>
+
+<!-- Privacy-friendly analytics by Plausible - only loaded when this installation has
+     opted in (Panel Settings > Anonymous Usage Statistics). Checked fresh on every page
+     load so toggling the setting takes effect immediately, without a rebuild/restart. -->
+<script>
+    (function () {
+        fetch('/api/panelsettings/analytics-status')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || !data.enabled) return;
+
+                window.plausible = window.plausible || function () { (plausible.q = plausible.q || []).push(arguments); };
+                plausible.init = plausible.init || function (i) { plausible.o = i || {}; };
+                plausible.init();
+
+                var s = document.createElement('script');
+                s.async = true;
+                s.src = 'https://telemetry.xenne.eu/js/pa-SlrtpzewJk9sPSRF6GG_A.js';
+                document.head.appendChild(s);
+            })
+            .catch(function () { });
+    })();
+
+    // Called by the authenticated app (once analytics-status has confirmed opt-in) with
+    // aggregate counts only - no SteamIDs, emails, or other identifiable data.
+    window.sendAnalyticsSnapshot = function (players, servers, users) {
+        if (window.plausible) {
+            window.plausible('server-stats', { props: { players: players, servers: servers, users: users } });
+        }
+    };
+</script>
 </body>
 
 </html>

@@ -47,6 +47,14 @@ public class PanelSettings
     public bool DeveloperModeEnabled { get; set; } = false;
 
     /// <summary>
+    /// Whether this installation sends anonymous usage statistics (install check-ins,
+    /// server/player/user counts - no personally identifiable data) to the developer via
+    /// a self-hosted Plausible instance. Opt-in: asked once during initial setup, and
+    /// adjustable at any time from the Panel Settings page.
+    /// </summary>
+    public bool AnalyticsEnabled { get; set; } = false;
+
+    /// <summary>
     /// When the settings were created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

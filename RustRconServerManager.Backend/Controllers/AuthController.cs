@@ -89,6 +89,20 @@ public class
             await _dbContext.SaveChangesAsync();
         }
 
+        var panelSettings = await _dbContext.PanelSettings
+            .FirstOrDefaultAsync(ps => ps.SystemProfileId == systemProfile.Id);
+        if (panelSettings == null)
+        {
+            _dbContext.PanelSettings.Add(new PanelSettings
+            {
+                SystemProfileId = systemProfile.Id,
+                AnalyticsEnabled = model.EnableAnonymousAnalytics,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await _dbContext.SaveChangesAsync();
+        }
+
         // Create the admin user
         var user = new ApplicationUser
         {

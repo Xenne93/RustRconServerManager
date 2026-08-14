@@ -242,6 +242,41 @@
                     }
                 </div>
             </TwCard>
+            <!-- Anonymous Analytics Card -->
+            <TwCard HeaderTitle="Anonymous Usage Statistics" HeaderIcon="fas fa-chart-simple">
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3 rounded-lg bg-blue-500/5 border border-blue-500/20 px-4 py-3">
+                        <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                        <p class="text-sm text-slate-300">When enabled, this installation sends anonymous usage statistics (install check-ins, server/player/user counts) to help improve the project. Nothing identifiable is collected, and nothing is shared with third parties.</p>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-slate-300">Share anonymous usage statistics</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" @bind="analyticsEnabled" class="sr-only peer" />
+                            <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                        </label>
+                    </div>
+
+                    <button class="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                            @onclick="SaveAnalytics" disabled="@analyticsSaving">
+                        @if (analyticsSaving)
+                        {
+                            <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                        }
+                        <i class="fas fa-save mr-1.5"></i>Save
+                    </button>
+
+                    @if (analyticsError != null)
+                    {
+                        <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@analyticsError</div>
+                    }
+                    @if (!string.IsNullOrEmpty(analyticsSuccessMessage))
+                    {
+                        <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2 text-sm">@analyticsSuccessMessage</div>
+                    }
+                </div>
+            </TwCard>
         </div>
 
     </div>
@@ -425,6 +460,12 @@
     private bool autoUpdateSaving = false;
     private string? autoUpdateError;
     private string autoUpdateSuccessMessage = "";
+
+    // Analytics state
+    private bool analyticsEnabled = false;
+    private bool analyticsSaving = false;
+    private string? analyticsError;
+    private string analyticsSuccessMessage = "";
 
     // Developer mode state
     private bool developerModeEnabled = false;
@@ -610,6 +651,7 @@
                     logLevel = string.IsNullOrEmpty(settings.MinimumLogLevel) ? "Error" : settings.MinimumLogLevel;
                     autoUpdateEnabled = settings.AutoUpdateEnabled;
                     developerModeEnabled = settings.DeveloperModeEnabled;
+                    analyticsEnabled = settings.AnalyticsEnabled;
                 }
             }
         }
@@ -678,6 +720,37 @@
         finally
         {
             autoUpdateSaving = false;
+        }
+    }
+
+    private async Task SaveAnalytics()
+    {
+        analyticsSaving = true;
+        analyticsError = null;
+        analyticsSuccessMessage = "";
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync("/api/panelsettings/analytics", new SetAnalyticsDto { AnalyticsEnabled = analyticsEnabled });
+
+            if (response.IsSuccessStatusCode)
+            {
+                analyticsSuccessMessage = "Analytics setting saved.";
+                _ = Task.Delay(3000).ContinueWith(_ => { analyticsSuccessMessage = ""; InvokeAsync(StateHasChanged); });
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                analyticsError = $"Failed to update analytics setting: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            analyticsError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            analyticsSaving = false;
         }
     }
 

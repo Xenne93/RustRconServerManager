@@ -73,6 +73,15 @@ else if (currentStep == SetupStep.AccountSetup)
                                    type="password" placeholder="Re-enter password" @onkeypress="HandleKeyPress" />
                         </div>
 
+                        <div class="mb-4 rounded-lg bg-slate-800/30 border border-slate-700/50 px-4 py-3 text-left">
+                            <label class="flex items-start gap-3 cursor-pointer">
+                                <input type="checkbox" @bind="enableAnonymousAnalytics" class="mt-1 rounded border-slate-700 bg-slate-800/50 text-orange-500 focus:ring-orange-500/50" />
+                                <span class="text-sm text-slate-300">
+                                    Help improve RustRconServerManager by sharing anonymous usage statistics (install check-ins, server/player counts). Nothing identifiable is collected, and nothing is shared with third parties. You can change this at any time in Panel Settings.
+                                </span>
+                            </label>
+                        </div>
+
                         <div class="flex gap-3">
                             <button @onclick="HandleAccountBack"
                                     class="flex-1 border border-slate-600 text-slate-300 hover:bg-slate-700 font-medium py-2.5 px-4 rounded-lg transition-colors"
@@ -111,6 +120,7 @@ else if (currentStep == SetupStep.AccountSetup)
     private string confirmPassword = string.Empty;
     private string? errorMessage;
     private string? successMessage;
+    private bool enableAnonymousAnalytics = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -182,7 +192,8 @@ else if (currentStep == SetupStep.AccountSetup)
         {
             Email = email,
             Password = password,
-            ConfirmPassword = confirmPassword
+            ConfirmPassword = confirmPassword,
+            EnableAnonymousAnalytics = enableAnonymousAnalytics
         };
 
         try

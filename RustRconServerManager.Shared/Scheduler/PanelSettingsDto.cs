@@ -8,6 +8,7 @@ public class PanelSettingsDto
     public string MinimumLogLevel { get; set; } = "Error";
     public bool AutoUpdateEnabled { get; set; } = true;
     public bool DeveloperModeEnabled { get; set; } = false;
+    public bool AnalyticsEnabled { get; set; } = false;
 
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -46,6 +47,23 @@ public class SetAutoUpdateDto
 public class SetDeveloperModeDto
 {
     public bool DeveloperModeEnabled { get; set; } = false;
+}
+
+public class SetAnalyticsDto
+{
+    public bool AnalyticsEnabled { get; set; } = false;
+}
+
+public class AnalyticsStatusDto
+{
+    public bool Enabled { get; set; } = false;
+}
+
+public class AnalyticsSnapshotDto
+{
+    public int Servers { get; set; }
+    public int Players { get; set; }
+    public int Users { get; set; }
 }
 
 public class DeveloperVacBanOverrideDto
