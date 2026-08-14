@@ -1,13 +1,26 @@
 Business Source License 1.1
 
 Licensor: Xenne
-Licensed Work: RustRconServerManager (this repository and all of its source code)
-Additional Use Grant: You may use, copy, modify, and self-host the Licensed Work for your own
-Rust game servers, and for the servers of others, free of charge, including commercially, as
-long as you are not offering the Licensed Work itself (or a modified or repackaged version of
-it) as a hosted or managed service, product, or platform to third parties in competition with
-the Licensor's own offerings. If you want to offer the Licensed Work as such a service, contact
-the Licensor to obtain a commercial license.
+
+Licensed Work: RustRconServerManager, meaning the source code authored by the Licensor and
+contained in this repository, excluding any third-party libraries, dependencies (including but
+not limited to packages under `node_modules/`, NuGet package caches, or vendored code), generated
+build artifacts, and any other files explicitly identified as being licensed separately from this
+License.
+
+Additional Use Grant: You may use, copy, modify, self-host, and operate the Licensed Work - including
+on behalf of Rust game servers you do not personally own, such as for a community, clan, or hosting
+customer whose servers you administer directly - free of charge, including commercially, as long as
+those customers or end users interact with your own management of their Rust servers rather than
+operating the Licensed Work themselves as a product. For example: using the Licensed Work internally
+to run "managed Rust server hosting" for paying customers is allowed; repackaging or rebranding the
+Licensed Work itself and letting those customers log into their own instance of it is not.
+
+What is not permitted without a commercial license from the Licensor is offering the Licensed Work
+itself (whether unmodified, modified, or repackaged/rebranded) as a hosted or managed product,
+platform, or service that third parties sign up for and operate themselves, in competition with the
+Licensor's own offerings. If you want to offer the Licensed Work as such a service, or are unsure
+whether your intended use qualifies, contact the Licensor to discuss a commercial license.
 
 Regardless of the above, any use, deployment, or distribution of the Licensed Work or a
 modified version of it must retain visible attribution to the original project, including a
@@ -39,19 +52,17 @@ The Licensor hereby grants you the right to copy, modify, create derivative work
 and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant,
 above, permitting limited production use.
 
-Effective on the Change Date, or the fourth anniversary of the first publicly available
-distribution of a specific version of the Licensed Work under this License, whichever comes
-first, the Licensor hereby grants you rights under the terms of the Change License, and the
-rights granted in the paragraph above terminate.
+Effective on the Change Date stated above, the Licensor hereby grants you rights under the terms
+of the Change License, and the rights granted in the paragraph above terminate.
 
 If your use of the Licensed Work does not comply with the requirements currently in effect as
 described in this License, you must purchase a commercial license from the Licensor, its
 affiliated entities, or authorized resellers, or you must refrain from using the Licensed Work.
 
 All copies of the original and modified Licensed Work, and derivative works of the Licensed
-Work, are subject to this License. This License applies separately for each version of the
-Licensed Work and the Change Date may vary for each version of the Licensed Work released by
-the Licensor.
+Work, are subject to this License. This License applies to the Licensed Work as a whole,
+including all versions released by the Licensor, unless the Licensor publishes a version of the
+Licensed Work under a different Change Date or license.
 
 You must conspicuously display this License on each original or modified copy of the Licensed
 Work. If you receive the Licensed Work in original or modified form from a third party, the
@@ -78,9 +89,11 @@ Covenant included in this License, above.
 
 ---
 
-Note: this License is adapted from the Business Source License 1.1 template. It is not a
-standard OSI-approved open source license - it restricts using the Licensed Work as a
-competing hosted service unless you have a commercial agreement with the Licensor, and it
-requires attribution back to the original project. This document is a starting point, not
-vetted legal text - have it reviewed by a lawyer before relying on it commercially, and fill in
-"Xenne" above with your actual legal name or entity if different.
+Note: this License is adapted from the Business Source License 1.1 template. It is a
+source-available license, not a standard OSI-approved open source license - it restricts using
+the Licensed Work as a competing hosted service unless you have a commercial agreement with the
+Licensor, and it requires attribution back to the original project. Unlike the original BSL 1.1
+template, the Change Date above is fixed and does not shift earlier based on when any particular
+version was first published. This document is a starting point, not vetted legal text - have it
+reviewed by a lawyer before relying on it commercially, and fill in "Xenne" above with your actual
+legal name or entity if different.
