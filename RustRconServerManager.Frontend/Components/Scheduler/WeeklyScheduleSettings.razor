@@ -1,0 +1,127 @@
+@using RustRconServerManager.Shared.Scheduler
+
+<div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4">
+    <h6 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Weekly Execution Settings</h6>
+
+    <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-300 mb-2">Days of Week</label>
+        <div class="flex flex-wrap gap-2">
+            @foreach (var (day, dayName) in Days)
+            {
+                <label class="flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors @(IsDaySelected(day) ? "bg-orange-500/20 border-orange-500/50 text-orange-400" : "bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600")">
+                    <input type="checkbox"
+                           class="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500/50"
+                           @onchange="@((ChangeEventArgs e) => HandleDayChange(day, (bool)e.Value))"
+                           @key="day"
+                           checked="@IsDaySelected(day)" />
+                    <span class="text-xs font-medium">@dayName</span>
+                </label>
+            }
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Hour (0-23)</label>
+            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                   min="0" max="23" @onchange="OnHourChange" value="@(ExecutionHour ?? 0)" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Minute (0-59)</label>
+            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                   min="0" max="59" @onchange="OnMinuteChange" value="@(ExecutionMinute ?? 0)" />
+        </div>
+    </div>
+
+    <div class="rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-3 py-2 text-xs mt-3">
+        <strong>Example:</strong> Monday, Wednesday, Friday at 18:30 will execute at 6:30 PM on those days
+    </div>
+</div>
+
+@code {
+    private readonly List<(int, string)> Days = new()
+    {
+        (0, "Sun"),
+        (1, "Mon"),
+        (2, "Tue"),
+        (3, "Wed"),
+        (4, "Thu"),
+        (5, "Fri"),
+        (6, "Sat")
+    };
+
+    [Parameter]
+    public string DaysOfWeek { get; set; } = "";
+
+    [Parameter]
+    public int? ExecutionHour { get; set; }
+
+    [Parameter]
+    public int? ExecutionMinute { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnDaysOfWeekChange { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> OnExecutionHourChange { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> OnExecutionMinuteChange { get; set; }
+
+    private List<int> ParseSelectedDays()
+    {
+        if (string.IsNullOrEmpty(DaysOfWeek))
+            return new();
+
+        return DaysOfWeek.Split(',')
+            .Select(d => int.TryParse(d.Trim(), out var num) ? num : -1)
+            .Where(d => d >= 0)
+            .ToList();
+    }
+
+    private bool IsDaySelected(int day)
+    {
+        return ParseSelectedDays().Contains(day);
+    }
+
+    private async Task HandleDayChange(int day, bool isChecked)
+    {
+        await OnDayToggle(day, isChecked);
+    }
+
+    private async Task OnDayToggle(int day, bool isChecked)
+    {
+        var selectedDays = ParseSelectedDays();
+
+        if (isChecked)
+        {
+            if (!selectedDays.Contains(day))
+                selectedDays.Add(day);
+        }
+        else
+        {
+            selectedDays.Remove(day);
+        }
+
+        DaysOfWeek = string.Join(",", selectedDays.OrderBy(d => d));
+        await OnDaysOfWeekChange.InvokeAsync(DaysOfWeek);
+    }
+
+    private async Task OnHourChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString() ?? "", out var value) && value >= 0 && value <= 23)
+        {
+            ExecutionHour = value;
+            await OnExecutionHourChange.InvokeAsync(value);
+        }
+    }
+
+    private async Task OnMinuteChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString() ?? "", out var value) && value >= 0 && value <= 59)
+        {
+            ExecutionMinute = value;
+            await OnExecutionMinuteChange.InvokeAsync(value);
+        }
+    }
+}

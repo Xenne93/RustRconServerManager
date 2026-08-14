@@ -1,0 +1,59 @@
+@* Tailwind Button Component *@
+
+@if (!string.IsNullOrEmpty(Href))
+{
+    <a href="@Href" class="@GetButtonClasses()" @attributes="AdditionalAttributes">
+        @if (IsLoading)
+        {
+            <span class="tw-spinner"></span>
+        }
+        @ChildContent
+    </a>
+}
+else
+{
+    <button type="@Type" class="@GetButtonClasses()" disabled="@(Disabled || IsLoading)" @onclick="OnClick" @attributes="AdditionalAttributes">
+        @if (IsLoading)
+        {
+            <span class="tw-spinner"></span>
+        }
+        @ChildContent
+    </button>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Variant { get; set; } = "primary";
+    [Parameter] public string Size { get; set; } = "default";
+    [Parameter] public bool Disabled { get; set; } = false;
+    [Parameter] public bool IsLoading { get; set; } = false;
+    [Parameter] public string Type { get; set; } = "button";
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string GetButtonClasses()
+    {
+        var variantClass = Variant switch
+        {
+            "secondary" => "tw-btn-secondary",
+            "outline" => "tw-btn-outline",
+            "ghost" => "tw-btn-ghost",
+            "danger" => "tw-btn-danger",
+            "warning" => "tw-btn-warning",
+            "success" => "tw-btn-success",
+            _ => "tw-btn-primary"
+        };
+
+        var sizeClass = Size switch
+        {
+            "sm" => "tw-btn-sm",
+            "lg" => "tw-btn-lg",
+            "icon" => "tw-btn-icon",
+            _ => ""
+        };
+
+        return $"{variantClass} {sizeClass} {Class}".Trim();
+    }
+}

@@ -1,0 +1,47 @@
+@* Tailwind Dropdown Item Component *@
+
+@if (!string.IsNullOrEmpty(Href))
+{
+    <a href="@Href" class="@GetClasses()" @attributes="AdditionalAttributes">
+        @ChildContent
+    </a>
+}
+else
+{
+    <button type="button" class="@GetClasses()" @onclick="HandleClick" @attributes="AdditionalAttributes">
+        @ChildContent
+    </button>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+    [Parameter] public bool IsActive { get; set; } = false;
+    [Parameter] public bool IsDanger { get; set; } = false;
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task HandleClick(MouseEventArgs args)
+    {
+        await OnClick.InvokeAsync(args);
+    }
+
+    private string GetClasses()
+    {
+        var baseClass = "tw-dropdown-item";
+        var stateClasses = "";
+
+        if (IsActive)
+        {
+            stateClasses += " bg-slate-700/50";
+        }
+
+        if (IsDanger)
+        {
+            stateClasses += " text-red-400 hover:text-red-300";
+        }
+
+        return $"{baseClass}{stateClasses} {Class}".Trim();
+    }
+}

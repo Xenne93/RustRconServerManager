@@ -1,0 +1,741 @@
+@using System.Net.Http.Json
+@using System.Text.Json
+@using Blazored.LocalStorage
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.SignalR
+@using Microsoft.AspNetCore.SignalR.Client
+@using RustRconServerManager.Shared.LiveConsole
+@using RustRconServerManager.Frontend.Services
+@inject ILocalStorageService LocalStorage
+@inject IJSRuntime JsRuntime
+@inject NavigationManager NavigationManager
+@inject NavigationHelper NavHelper
+@inject HttpClient Http
+
+<div class="tw-card @(isFullscreen ? "fixed inset-0 z-[1050] rounded-none" : "")" id="consoleCardContainer" style="@(isFullscreen ? "" : $"height: {Height};") display: flex; flex-direction: column;">
+    @* Header *@
+    <div class="tw-card-header">
+        <div class="flex items-center gap-2">
+            <i class="fas fa-terminal text-orange-400 text-sm"></i>
+            <span class="text-sm font-semibold text-white">Live Console</span>
+            <div class="flex items-center gap-1 ml-2">
+                <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                <span class="text-xs text-slate-400">Live</span>
+            </div>
+            <span class="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">
+                @consoleMessages.Count entries
+            </span>
+        </div>
+        <div class="flex items-center gap-1">
+            <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-white" title="Search Console Logs" @onclick="OpenSearchModal">
+                <i class="fas fa-search text-xs"></i>
+            </button>
+            <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-white" title="@(isFullscreen ? "Exit Fullscreen" : "Fullscreen")" @onclick="ToggleConsoleFullscreen">
+                <i class="fas @(isFullscreen ? "fa-compress" : "fa-expand") text-xs"></i>
+            </button>
+        </div>
+    </div>
+
+    @* Console Output *@
+    <div class="flex-1 flex flex-col min-h-0 p-4">
+        <div @ref="consoleEl"
+             class="flex-1 overflow-y-auto font-mono text-xs p-4 space-y-1 rounded-lg bg-slate-950/50"
+             style="min-height: 0;">
+
+            @if (isLoadingHistory)
+            {
+                <div class="text-center text-slate-500 mb-3">
+                    <small><i class="fas fa-spinner fa-spin mr-1"></i> Loading history...</small>
+                </div>
+            }
+            else if (hasReachedBeginning && consoleMessages.Count > 0)
+            {
+                <div class="text-center text-slate-500 mb-3">
+                    <small><i class="fas fa-flag-checkered mr-1"></i> Beginning of console history</small>
+                </div>
+            }
+
+            @foreach (var msg in consoleMessages)
+            {
+                <div class="flex gap-2 leading-relaxed hover:bg-slate-800/30 px-1 rounded">
+                    <span class="text-slate-500 shrink-0 text-[10px]">@msg.TimeStamp.ToLocalTime().ToString("dd-MM HH:mm:ss")</span>
+                    <span class="text-slate-300 break-all whitespace-pre-wrap min-w-0">@msg.Message</span>
+                </div>
+            }
+        </div>
+
+        @* Command Input *@
+        <div class="pt-4 flex-shrink-0">
+            <div class="flex items-center gap-2">
+                <span class="text-orange-400 font-mono text-sm">></span>
+                <input type="text"
+                       class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500 font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50"
+                       placeholder="Enter command..."
+                       @bind="commandInput"
+                       @bind:event="oninput"
+                       @onkeydown="HandleKeyDown"
+                       @onkeydown:preventDefault="suppressKeyDefault" />
+                <button class="tw-btn-primary px-4 py-2" @onclick="SendCommand">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Search Modal *@
+@if (showSearchModal)
+{
+    <div class="fixed inset-0 z-[1060]">
+        <div class="tw-modal-backdrop" @onclick="CloseSearchModal"></div>
+        <div class="tw-modal max-w-2xl">
+            <div class="tw-modal-header">
+                <h5 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <i class="fas fa-search text-orange-400"></i>Search Console Logs
+                </h5>
+                <button type="button" class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="CloseSearchModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="tw-modal-body">
+                <div class="flex gap-2 mb-4">
+                    <input type="text" class="tw-input font-mono" placeholder="Enter search term..."
+                           @bind="searchQuery" @bind:event="oninput"
+                           @onkeypress="HandleSearchKeyPress" />
+                    <button class="tw-btn-primary whitespace-nowrap" @onclick="ExecuteSearch" disabled="@isSearching">
+                        @if (isSearching)
+                        {
+                            <span class="tw-spinner mr-1" style="width: 14px; height: 14px;"></span>
+                            <span>Searching...</span>
+                        }
+                        else
+                        {
+                            <span>Search</span>
+                        }
+                    </button>
+                </div>
+
+                @if (searchResults.Count > 0)
+                {
+                    <div class="mb-2 text-slate-400 text-xs">
+                        <i class="fas fa-info-circle mr-1"></i>Found @searchResults.Count result(s)@(hasMoreResults ? "+" : "")
+                        @if (hasMoreResults)
+                        {
+                            <span class="ml-2 text-orange-400"><i class="fas fa-arrow-down mr-1"></i>Scroll down to load more</span>
+                        }
+                    </div>
+                    <div class="max-h-96 overflow-y-auto rounded-lg bg-slate-950/50 p-3 font-mono text-xs space-y-1">
+                        @foreach (var msg in searchResults)
+                        {
+                            <div class="flex gap-2 leading-relaxed hover:bg-slate-800/30 px-1 rounded">
+                                <span class="text-slate-500 shrink-0 text-[10px]">@msg.TimeStamp.ToLocalTime().ToString("dd-MM HH:mm:ss")</span>
+                                <span class="text-slate-300 break-all whitespace-pre-wrap min-w-0">@HighlightSearchTerm(msg.Message)</span>
+                            </div>
+                        }
+                        @if (hasMoreResults)
+                        {
+                            <div class="text-center mt-3">
+                                <button class="tw-btn-outline tw-btn-sm" @onclick="LoadMoreSearchResults" disabled="@isLoadingMore">
+                                    @if (isLoadingMore)
+                                    {
+                                        <span class="tw-spinner mr-1" style="width: 12px; height: 12px;"></span>
+                                        <span>Loading...</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-plus mr-1"></i>
+                                        <span>Load More Results</span>
+                                    }
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+                else if (hasSearched && !isSearching)
+                {
+                    <div class="text-center text-slate-500 py-8">
+                        <i class="fas fa-search text-2xl mb-2 block"></i>
+                        <p>No results found for "<strong class="text-white">@lastSearchQuery</strong>"</p>
+                    </div>
+                }
+                else if (!hasSearched)
+                {
+                    <div class="text-center text-slate-500 py-8">
+                        <i class="fas fa-terminal text-2xl mb-2 block"></i>
+                        <p>Enter a search term to search through console logs</p>
+                    </div>
+                }
+            </div>
+            <div class="tw-modal-footer">
+                <button type="button" class="tw-btn-secondary" @onclick="CloseSearchModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Inline, component-scoped helper: loaded only when this component renders -->
+<script>
+  window.consoleScroll = window.consoleScroll || {
+    getInfo: function (el) {
+      if (!el) return null;
+      return {
+        scrollTop: el.scrollTop,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight
+      };
+    },
+    setScrollTop: function (el, top) {
+      if (!el) return;
+      el.scrollTop = top;
+    }
+  };
+</script>
+
+@code {
+    [Parameter] public string Height { get; set; } = "450px";
+
+    private HubConnection? hubConnection;
+    private string commandInput = string.Empty;
+    private readonly List<ConsoleMessage> consoleMessages = new();
+
+    // Command history (arrow up/down navigation)
+    private readonly List<string> commandHistory = new();
+    private int historyIndex = -1;
+    private string savedCurrentInput = string.Empty;
+    private bool suppressKeyDefault = false;
+    private const int MaxHistorySize = 100;
+
+    private ElementReference consoleEl;
+
+    // When true, we may auto-scroll to bottom after render (if user was already near bottom).
+    private bool _messageAppended;
+    private bool _jsBootstrapped;
+
+    private bool isLoadingHistory = false;
+    private int messagesLoadedCount = 0;
+    private int serverId = 0;
+    private bool isFullscreen = false;
+    private bool hasReachedBeginning = false;
+
+    // Search state
+    private bool showSearchModal = false;
+    private string searchQuery = string.Empty;
+    private string lastSearchQuery = string.Empty;
+    private bool isSearching = false;
+    private bool isLoadingMore = false;
+    private bool hasSearched = false;
+    private bool hasMoreResults = false;
+    private int searchResultsLoaded = 0;
+    private const int SearchPageSize = 200;
+    private readonly List<ConsoleMessage> searchResults = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+        await LoadPreviousLogs();
+        await InitializeConsole();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsBootstrapped)
+        {
+            _jsBootstrapped = true;
+            var dotnetHelper = DotNetObjectReference.Create(this);
+
+            await JsRuntime.InvokeVoidAsync("eval", @"
+                window.__consoleScrollHandler = {
+                    dotnetHelper: null,
+                    el: null,
+                    autoScroll: true,
+                    loadingMore: false,
+                    lastLoadTime: 0,
+                    loadDebounceMs: 500,
+
+                    init: function(element, helper) {
+                        this.el = element;
+                        this.dotnetHelper = helper;
+                        if (!this.el) return;
+
+                        const self = this;
+                        const threshold = 20;
+                        const loadThreshold = 150;
+
+                        this.el.addEventListener('scroll', function() {
+                            const now = Date.now();
+                            const atBottom = self.el.scrollTop + self.el.clientHeight >= self.el.scrollHeight - threshold;
+                            self.autoScroll = atBottom;
+
+                            if (self.loadingMore || (now - self.lastLoadTime) < self.loadDebounceMs) {
+                                return;
+                            }
+
+                            if (self.el.scrollTop <= loadThreshold) {
+                                self.lastLoadTime = now;
+                                self.loadingMore = true;
+
+                                try {
+                                    self.dotnetHelper.invokeMethodAsync('LoadMoreLogs').then(() => {
+                                        self.loadingMore = false;
+                                    }).catch(err => {
+                                        self.loadingMore = false;
+                                    });
+                                } catch(e) {
+                                    self.loadingMore = false;
+                                }
+                            }
+                        }, { passive: true });
+
+                        const mo = new MutationObserver(() => {
+                            if (self.autoScroll) {
+                                self.el.scrollTop = self.el.scrollHeight;
+                            }
+                        });
+                        mo.observe(this.el, { childList: true, subtree: false });
+
+                        this.el.scrollTop = this.el.scrollHeight;
+                    },
+
+                    scrollToBottom: function() {
+                        if (!this.el) return;
+                        if (this.autoScroll) {
+                            this.el.scrollTop = this.el.scrollHeight;
+                        }
+                    }
+                };
+            ");
+
+            await JsRuntime.InvokeVoidAsync("__consoleScrollHandler.init", consoleEl, dotnetHelper);
+        }
+
+        if (_messageAppended)
+        {
+            _messageAppended = false;
+            await JsRuntime.InvokeVoidAsync("__consoleScrollHandler.scrollToBottom");
+        }
+    }
+
+    private async Task InitializeConsole()
+    {
+        try
+        {
+            var hubUrl = NavHelper.GetUrl("liveconsole");
+            var absoluteHubUrl = new Uri(new Uri(NavigationManager.Uri), hubUrl).ToString();
+
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(absoluteHubUrl)
+                .WithAutomaticReconnect()
+                .Build();
+
+            hubConnection.On<string>("ReceiveConsole", msg =>
+            {
+                consoleMessages.Add(new ConsoleMessage
+                {
+                    TimeStamp = DateTime.UtcNow,
+                    Message = msg
+                });
+                _messageAppended = true;
+                InvokeAsync(StateHasChanged);
+            });
+
+            hubConnection.On<int, string>("ReceivedServerMessage", (serverId, msg) =>
+            {
+                consoleMessages.Add(new ConsoleMessage
+                {
+                    TimeStamp = DateTime.UtcNow,
+                    Message = msg
+                });
+                _messageAppended = true;
+                InvokeAsync(StateHasChanged);
+            });
+
+            await hubConnection.StartAsync();
+            await hubConnection.SendAsync("RefreshServerSubscription");
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task LoadPreviousLogs()
+    {
+        if (serverId == 0) return;
+
+        try
+        {
+            isLoadingHistory = true;
+
+            var response = await Http.GetAsync($"/api/Console/recent/{serverId}?count=100");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var loadedLogs = JsonSerializer.Deserialize<List<LiveConsole_RconLiveConsoleEntryDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (loadedLogs != null && loadedLogs.Count > 0)
+                {
+                    foreach (var log in loadedLogs)
+                    {
+                        consoleMessages.Add(new ConsoleMessage
+                        {
+                            TimeStamp = log.TimeStamp,
+                            Message = log.Message
+                        });
+                    }
+                    messagesLoadedCount = loadedLogs.Count;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading previous logs: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    [JSInvokable]
+    public async Task LoadMoreLogs()
+    {
+        if (serverId == 0 || isLoadingHistory || hasReachedBeginning) return;
+
+        try
+        {
+            isLoadingHistory = true;
+            await InvokeAsync(StateHasChanged);
+
+            var response = await Http.GetAsync($"/api/Console/messages/{serverId}?skip={messagesLoadedCount}&take=200");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var loadedLogs = JsonSerializer.Deserialize<List<LiveConsole_RconLiveConsoleEntryDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (loadedLogs == null || loadedLogs.Count == 0)
+                {
+                    hasReachedBeginning = true;
+                    isLoadingHistory = false;
+                    await InvokeAsync(StateHasChanged);
+                    return;
+                }
+
+                var previousScrollHeight = 0.0;
+                try
+                {
+                    previousScrollHeight = await JsRuntime.InvokeAsync<double>("eval", "document.querySelector('.chatbox-card')?.scrollHeight ?? 0");
+                }
+                catch { }
+
+                var formattedLogs = loadedLogs
+                    .Select(m => new ConsoleMessage
+                    {
+                        TimeStamp = m.TimeStamp,
+                        Message = m.Message
+                    })
+                    .ToList();
+                consoleMessages.InsertRange(0, formattedLogs);
+                messagesLoadedCount += loadedLogs.Count;
+
+                isLoadingHistory = false;
+                await InvokeAsync(StateHasChanged);
+
+                await Task.Delay(50);
+                try
+                {
+                    var newScrollHeight = await JsRuntime.InvokeAsync<double>("eval", "document.querySelector('.chatbox-card')?.scrollHeight ?? 0");
+                    var heightDifference = newScrollHeight - previousScrollHeight;
+                    await JsRuntime.InvokeVoidAsync("eval", $"document.querySelector('.chatbox-card').scrollTop = {heightDifference};");
+                }
+                catch { }
+            }
+            else
+            {
+                hasReachedBeginning = true;
+                isLoadingHistory = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ConsoleCard] Error loading more logs: {ex.Message}");
+            isLoadingHistory = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        suppressKeyDefault = e.Key == "ArrowUp" || e.Key == "ArrowDown";
+
+        if (e.Key == "Enter")
+        {
+            await SendCommand();
+        }
+        else if (e.Key == "ArrowUp")
+        {
+            if (commandHistory.Count == 0) return;
+
+            if (historyIndex == -1)
+            {
+                savedCurrentInput = commandInput ?? string.Empty;
+                historyIndex = commandHistory.Count - 1;
+            }
+            else if (historyIndex > 0)
+            {
+                historyIndex--;
+            }
+
+            commandInput = commandHistory[historyIndex];
+        }
+        else if (e.Key == "ArrowDown")
+        {
+            if (historyIndex == -1) return;
+
+            if (historyIndex < commandHistory.Count - 1)
+            {
+                historyIndex++;
+                commandInput = commandHistory[historyIndex];
+            }
+            else
+            {
+                historyIndex = -1;
+                commandInput = savedCurrentInput;
+            }
+        }
+    }
+
+    private async Task SendCommand()
+    {
+        if (hubConnection is null || hubConnection.State != HubConnectionState.Connected) return;
+        var trimmed = commandInput?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return;
+
+        try
+        {
+            // Add to command history
+            if (commandHistory.Count == 0 || commandHistory[^1] != trimmed)
+            {
+                commandHistory.Add(trimmed);
+                if (commandHistory.Count > MaxHistorySize)
+                    commandHistory.RemoveAt(0);
+            }
+            historyIndex = -1;
+            savedCurrentInput = string.Empty;
+
+            await hubConnection.InvokeAsync("SendCommandToCurrentServer", trimmed);
+            commandInput = string.Empty;
+        }
+        catch (HubException hex)
+        {
+            consoleMessages.Add(new ConsoleMessage { TimeStamp = DateTime.UtcNow, Message = $"[System] Hub error: {hex.Message}" });
+            _messageAppended = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            consoleMessages.Add(new ConsoleMessage { TimeStamp = DateTime.UtcNow, Message = $"[System] Error: {ex.GetType().Name}: {ex.Message}" });
+            _messageAppended = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async Task SendPresetCommand(string command)
+    {
+        if (hubConnection is null || hubConnection.State != HubConnectionState.Connected) return;
+        if (string.IsNullOrWhiteSpace(command)) return;
+
+        try
+        {
+            consoleMessages.Add(new ConsoleMessage { TimeStamp = DateTime.UtcNow, Message = $"> {command}" });
+            _messageAppended = true;
+            await InvokeAsync(StateHasChanged);
+
+            await hubConnection.InvokeAsync("SendCommandToCurrentServer", command);
+        }
+        catch (HubException hex)
+        {
+            consoleMessages.Add(new ConsoleMessage { TimeStamp = DateTime.UtcNow, Message = $"[System] Hub error: {hex.Message}" });
+            _messageAppended = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            consoleMessages.Add(new ConsoleMessage { TimeStamp = DateTime.UtcNow, Message = $"[System] Error: {ex.GetType().Name}: {ex.Message}" });
+            _messageAppended = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ToggleConsoleFullscreen()
+    {
+        isFullscreen = !isFullscreen;
+        StateHasChanged();
+
+        await Task.Delay(100);
+        try
+        {
+            if (isFullscreen)
+            {
+                await JsRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = 'hidden';");
+            }
+            else
+            {
+                await JsRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = 'auto';");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error toggling fullscreen: {ex.Message}");
+        }
+    }
+
+    private void OpenSearchModal()
+    {
+        showSearchModal = true;
+        searchQuery = string.Empty;
+        searchResults.Clear();
+        hasSearched = false;
+    }
+
+    private void CloseSearchModal()
+    {
+        showSearchModal = false;
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ExecuteSearch();
+    }
+
+    private async Task ExecuteSearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery) || serverId == 0) return;
+
+        isSearching = true;
+        hasSearched = true;
+        lastSearchQuery = searchQuery;
+        searchResults.Clear();
+        searchResultsLoaded = 0;
+        hasMoreResults = false;
+        StateHasChanged();
+
+        try
+        {
+            var encodedQuery = Uri.EscapeDataString(searchQuery);
+            var response = await Http.GetAsync($"/api/Console/search/{serverId}?query={encodedQuery}&skip=0&take={SearchPageSize}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var results = JsonSerializer.Deserialize<List<LiveConsole_RconLiveConsoleEntryDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (results != null)
+                {
+                    foreach (var log in results)
+                    {
+                        searchResults.Add(new ConsoleMessage { TimeStamp = log.TimeStamp, Message = log.Message });
+                    }
+                    searchResultsLoaded = results.Count;
+                    hasMoreResults = results.Count >= SearchPageSize;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching logs: {ex.Message}");
+        }
+        finally
+        {
+            isSearching = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMoreSearchResults()
+    {
+        if (string.IsNullOrWhiteSpace(lastSearchQuery) || serverId == 0 || isLoadingMore) return;
+
+        isLoadingMore = true;
+        StateHasChanged();
+
+        try
+        {
+            var encodedQuery = Uri.EscapeDataString(lastSearchQuery);
+            var response = await Http.GetAsync($"/api/Console/search/{serverId}?query={encodedQuery}&skip={searchResultsLoaded}&take={SearchPageSize}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var results = JsonSerializer.Deserialize<List<LiveConsole_RconLiveConsoleEntryDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (results != null && results.Count > 0)
+                {
+                    foreach (var log in results)
+                    {
+                        searchResults.Add(new ConsoleMessage { TimeStamp = log.TimeStamp, Message = log.Message });
+                    }
+                    searchResultsLoaded += results.Count;
+                    hasMoreResults = results.Count >= SearchPageSize;
+                }
+                else
+                {
+                    hasMoreResults = false;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading more search results: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingMore = false;
+            StateHasChanged();
+        }
+    }
+
+    private MarkupString HighlightSearchTerm(string text)
+    {
+        if (string.IsNullOrWhiteSpace(lastSearchQuery) || string.IsNullOrWhiteSpace(text))
+            return new MarkupString(System.Web.HttpUtility.HtmlEncode(text));
+
+        var escapedText = System.Web.HttpUtility.HtmlEncode(text);
+        var escapedQuery = System.Web.HttpUtility.HtmlEncode(lastSearchQuery);
+
+        var pattern = System.Text.RegularExpressions.Regex.Escape(escapedQuery);
+        var highlighted = System.Text.RegularExpressions.Regex.Replace(
+            escapedText,
+            pattern,
+            match => $"<mark class=\"bg-orange-500/30 text-orange-200 px-0.5 rounded\">{match.Value}</mark>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+        );
+
+        return new MarkupString(highlighted);
+    }
+
+    private sealed class CommandRequest
+    {
+        public string Command { get; set; } = string.Empty;
+    }
+
+    private sealed class ScrollInfo
+    {
+        public double ScrollTop { get; set; }
+        public double ScrollHeight { get; set; }
+        public double ClientHeight { get; set; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            try { await hubConnection.DisposeAsync(); }
+            catch { }
+        }
+    }
+
+    private sealed class ConsoleMessage
+    {
+        public DateTime TimeStamp { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+}

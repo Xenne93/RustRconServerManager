@@ -1,0 +1,359 @@
+@using Blazored.LocalStorage;
+@using RustRconServerManager.Frontend.Components.UI
+@inject IJSRuntime JSRuntime
+
+<TwCard HeaderTitle="Restart Server" HeaderIcon="fas fa-redo">
+    <div class="space-y-5">
+        <!-- Info Note -->
+        <div class="flex items-start gap-3 rounded-lg bg-amber-500/5 border border-amber-500/20 px-4 py-3">
+            <i class="fas fa-lightbulb text-amber-400 mt-0.5"></i>
+            <p class="text-sm text-slate-300">Both countdown timer and restart reason are optional. Leave empty for an immediate restart without a reason message.</p>
+        </div>
+
+        <!-- Tabs: Countdown vs Schedule -->
+        <div>
+            <div class="flex border-b border-slate-700/50 mb-4">
+                <button type="button"
+                        class="px-4 py-2.5 text-sm font-medium transition-colors relative @(!UseTimeMode ? "text-orange-400" : "text-slate-400 hover:text-slate-300")"
+                        @onclick="() => UseTimeMode = false">
+                    <i class="fas fa-hourglass-end mr-2"></i>Countdown Seconds
+                    @if (!UseTimeMode)
+                    {
+                        <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500"></div>
+                    }
+                </button>
+                <button type="button"
+                        class="px-4 py-2.5 text-sm font-medium transition-colors relative @(UseTimeMode ? "text-orange-400" : "text-slate-400 hover:text-slate-300")"
+                        @onclick="() => UseTimeMode = true">
+                    <i class="fas fa-clock mr-2"></i>Schedule Time
+                    @if (UseTimeMode)
+                    {
+                        <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500"></div>
+                    }
+                </button>
+            </div>
+
+            @if (!UseTimeMode)
+            {
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-slate-300">
+                        <i class="fas fa-hourglass-end mr-1 text-orange-400"></i>Countdown Timer (seconds)
+                    </label>
+                    <input type="number"
+                           class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                           @bind="CountdownSeconds"
+                           placeholder="e.g. 300 (5 minutes)"
+                           min="0" />
+                    <p class="text-xs text-slate-500"><i class="fas fa-info-circle mr-1"></i>Time in seconds before restart begins. Leave empty for immediate restart (3s default).</p>
+                </div>
+            }
+            else
+            {
+                <div class="space-y-4">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-slate-300">
+                            <i class="fas fa-calendar-alt mr-1 text-orange-400"></i>Schedule Date & Time
+                        </label>
+                        <input type="datetime-local"
+                               class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                               @bind="ScheduledDateTime" />
+                        <p class="text-xs text-slate-500"><i class="fas fa-info-circle mr-1"></i>Using your browser timezone</p>
+                    </div>
+
+                    <!-- Calculated Countdown -->
+                    <div class="flex items-start gap-3 rounded-lg bg-slate-800/40 border border-slate-700/30 px-4 py-3">
+                        <i class="fas fa-calculator text-orange-400 mt-0.5"></i>
+                        <div class="text-sm">
+                            <span class="text-slate-400 font-medium">Calculated countdown: </span>
+                            @if (ScheduledDateTime != null)
+                            {
+                                @if (CalculatedCountdownSeconds > 0)
+                                {
+                                    <span class="text-white font-medium">@CalculatedCountdownSeconds seconds</span>
+                                    <span class="text-slate-500"> (~@FormatTimespan(TimeSpan.FromSeconds(CalculatedCountdownSeconds)))</span>
+                                }
+                                else
+                                {
+                                    <span class="text-red-400 font-medium"><i class="fas fa-exclamation-triangle mr-1"></i>Selected time is in the past!</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-slate-500">Select a date and time to see countdown</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Restart Reason -->
+        <div class="space-y-2">
+            <label class="block text-sm font-medium text-slate-300">
+                <i class="fas fa-comment mr-1 text-orange-400"></i>Restart Reason
+            </label>
+            <input type="text"
+                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                   @bind="RestartReason"
+                   placeholder="e.g. Server maintenance, Performance optimization" />
+            <p class="text-xs text-slate-500"><i class="fas fa-info-circle mr-1"></i>Message shown to players during restart countdown</p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+            <button class="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    @onclick="OnRestartClick"
+                    disabled="@(IsLoadingRestart || IsLoadingAbort)">
+                @if (IsLoadingRestart)
+                {
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Sending Restart Command...</span>
+                }
+                else
+                {
+                    <i class="fas fa-redo"></i>
+                    <span>Restart Server</span>
+                }
+            </button>
+            <button class="flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 font-medium py-3 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    @onclick="OnAbortRestartClick"
+                    disabled="@(IsLoadingRestart || IsLoadingAbort)"
+                    title="Send restart -1 command to abort a started restart">
+                @if (IsLoadingAbort)
+                {
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Aborting...</span>
+                }
+                else
+                {
+                    <i class="fas fa-stop"></i>
+                    <span>Abort Restart</span>
+                }
+            </button>
+        </div>
+
+        <p class="text-xs text-slate-500"><i class="fas fa-exclamation-triangle mr-1 text-red-400"></i><strong>Abort Restart:</strong> Sends the <code class="text-orange-400">restart -1</code> command to cancel a restart that has already been initiated.</p>
+
+        <!-- Status Message -->
+        @if (!string.IsNullOrEmpty(StatusMessage))
+        {
+            <div class="flex items-start gap-3 rounded-lg px-4 py-3 @GetStatusClasses()">
+                <i class="@GetAlertIcon() mt-0.5"></i>
+                <p class="text-sm">@StatusMessage</p>
+            </div>
+        }
+    </div>
+</TwCard>
+
+@code {
+    [Inject] private HttpClient Http { get; set; } = null!;
+    [Inject] private ILocalStorageService LocalStorage { get; set; } = null!;
+
+    private int? CountdownSeconds;
+    private string RestartReason = string.Empty;
+    private bool IsLoadingRestart = false;
+    private bool IsLoadingAbort = false;
+    private string StatusMessage = string.Empty;
+    private bool IsError = false;
+    private bool IsSuccess = false;
+
+    // Time picker properties
+    private bool UseTimeMode = false;
+    private DateTime? ScheduledDateTime;
+    private int _browserUtcOffsetMinutes = 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _browserUtcOffsetMinutes = await JSRuntime.InvokeAsync<int>("eval", "new Date().getTimezoneOffset()");
+                StateHasChanged();
+            }
+            catch { }
+        }
+    }
+
+    private int CalculatedCountdownSeconds
+    {
+        get
+        {
+            if (ScheduledDateTime == null)
+                return 0;
+
+            // ScheduledDateTime is in the user's local time (from datetime-local input)
+            // Convert to UTC: UTC = local + getTimezoneOffset()
+            var scheduledUtc = ScheduledDateTime.Value.AddMinutes(_browserUtcOffsetMinutes);
+            var now = DateTime.UtcNow;
+            var difference = scheduledUtc - now;
+            return (int)difference.TotalSeconds;
+        }
+    }
+
+    private string FormatTimespan(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        else if (ts.TotalMinutes >= 1)
+            return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
+        else
+            return $"{ts.Seconds}s";
+    }
+
+    private async Task OnRestartClick()
+    {
+        try
+        {
+            IsLoadingRestart = true;
+            StatusMessage = string.Empty;
+
+            var activeServerId = await LocalStorage.GetItemAsync<int>("activeServerId");
+            if (activeServerId == 0)
+            {
+                StatusMessage = "No server selected.";
+                IsError = true;
+                IsSuccess = false;
+                return;
+            }
+
+            int? finalCountdownSeconds = null;
+
+            if (UseTimeMode)
+            {
+                if (ScheduledDateTime == null)
+                {
+                    StatusMessage = "Please select a date and time for scheduled restart.";
+                    IsError = true;
+                    IsSuccess = false;
+                    return;
+                }
+
+                finalCountdownSeconds = CalculatedCountdownSeconds;
+
+                if (finalCountdownSeconds <= 0)
+                {
+                    StatusMessage = "Selected restart time is in the past. Please choose a future time.";
+                    IsError = true;
+                    IsSuccess = false;
+                    return;
+                }
+            }
+            else
+            {
+                if (CountdownSeconds.HasValue && CountdownSeconds.Value > 0)
+                {
+                    finalCountdownSeconds = CountdownSeconds.Value;
+                }
+                else
+                {
+                    finalCountdownSeconds = 3;
+                }
+            }
+
+            var command = "restart";
+            if (finalCountdownSeconds.HasValue && finalCountdownSeconds.Value > 0)
+            {
+                command += $" {finalCountdownSeconds.Value}";
+            }
+            if (!string.IsNullOrWhiteSpace(RestartReason))
+            {
+                command += $" {RestartReason}";
+            }
+
+            var response = await Http.PostAsJsonAsync("/api/Rcon/SendCustomCommand", new { command = command });
+
+            if (response.IsSuccessStatusCode)
+            {
+                StatusMessage = $"Restart command sent successfully! Command: {command}";
+                IsError = false;
+                IsSuccess = true;
+
+                await Task.Delay(2000);
+                CountdownSeconds = null;
+                RestartReason = string.Empty;
+                StatusMessage = string.Empty;
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                StatusMessage = $"Error sending command: {response.StatusCode} - {errorContent}";
+                IsError = true;
+                IsSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error: {ex.Message}";
+            IsError = true;
+            IsSuccess = false;
+        }
+        finally
+        {
+            IsLoadingRestart = false;
+        }
+    }
+
+    private async Task OnAbortRestartClick()
+    {
+        try
+        {
+            IsLoadingAbort = true;
+            StatusMessage = string.Empty;
+
+            var activeServerId = await LocalStorage.GetItemAsync<int>("activeServerId");
+            if (activeServerId == 0)
+            {
+                StatusMessage = "No server selected.";
+                IsError = true;
+                IsSuccess = false;
+                return;
+            }
+
+            var command = "restart -1";
+
+            var response = await Http.PostAsJsonAsync("/api/Rcon/SendCustomCommand", new { command = command });
+
+            if (response.IsSuccessStatusCode)
+            {
+                StatusMessage = "Restart abort command sent successfully! The server restart has been cancelled.";
+                IsError = false;
+                IsSuccess = true;
+
+                await Task.Delay(2000);
+                StatusMessage = string.Empty;
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                StatusMessage = $"Error sending command: {response.StatusCode} - {errorContent}";
+                IsError = true;
+                IsSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error: {ex.Message}";
+            IsError = true;
+            IsSuccess = false;
+        }
+        finally
+        {
+            IsLoadingAbort = false;
+        }
+    }
+
+    private string GetStatusClasses() => (IsSuccess, IsError) switch
+    {
+        (true, _) => "bg-emerald-500/5 border border-emerald-500/20 text-emerald-400",
+        (_, true) => "bg-red-500/5 border border-red-500/20 text-red-400",
+        _ => "bg-blue-500/5 border border-blue-500/20 text-blue-400"
+    };
+
+    private string GetAlertIcon() => (IsSuccess, IsError) switch
+    {
+        (true, _) => "fas fa-check-circle text-emerald-400",
+        (_, true) => "fas fa-exclamation-circle text-red-400",
+        _ => "fas fa-info-circle text-blue-400"
+    };
+}

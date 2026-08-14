@@ -1,0 +1,50 @@
+@using RustRconServerManager.Shared.Scheduler
+
+<div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4">
+    <h6 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">One-Time Execution Settings</h6>
+    <div>
+        <label class="block text-sm font-medium text-slate-300 mb-1">Execute At</label>
+        <input type="datetime-local" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+               @onchange="OnDateTimeChanged" value="@_executeAtLocal" />
+        <p class="text-xs text-slate-500 mt-1">Date and time when the command should be executed</p>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public DateTime? ExecuteAt { get; set; }
+
+    [Parameter]
+    public EventCallback<DateTime?> OnExecuteAtChange { get; set; }
+
+    private string _executeAtLocal = "";
+
+    protected override void OnParametersSet()
+    {
+        if (ExecuteAt.HasValue)
+        {
+            _executeAtLocal = ExecuteAt.Value.ToString("yyyy-MM-ddTHH:mm");
+        }
+        else
+        {
+            _executeAtLocal = "";
+        }
+    }
+
+    private async Task OnDateTimeChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (DateTime.TryParse(value, out var dt))
+        {
+            ExecuteAt = dt;
+            _executeAtLocal = dt.ToString("yyyy-MM-ddTHH:mm");
+            await OnExecuteAtChange.InvokeAsync(dt);
+        }
+        else
+        {
+            ExecuteAt = null;
+            _executeAtLocal = "";
+            await OnExecuteAtChange.InvokeAsync(null);
+        }
+    }
+}

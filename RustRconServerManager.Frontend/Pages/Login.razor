@@ -1,0 +1,242 @@
+@page "/login"
+@layout LoginLayout
+@using RustRconServerManager.Shared.Configuration
+@using Blazored.LocalStorage
+@using RustRconServerManager.Shared.Authorization
+@using RustRconServerManager.Frontend.Services
+@using System.Net.Http.Json
+@inject ILocalStorageService LocalStorage
+@inject NavigationManager NavigationManager
+@inject NavigationHelper NavHelper
+@inject IJSRuntime JS
+@inject HttpClient Http
+
+<section class="flex justify-center items-center min-h-screen overflow-y-auto bg-[#0f0f17]">
+    <div class="w-full max-w-md px-4">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Rust RCON Server Manager</h1>
+            <p class="text-slate-400 mt-2">Manage your Rust servers the easy way.</p>
+        </div>
+
+        <div class="rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 to-slate-950/80 backdrop-blur-sm">
+            <div class="p-6 flex flex-col items-center">
+                <!-- User Icon -->
+                <div class="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center my-4">
+                    <i class="fa-solid fa-user text-orange-400 text-2xl"></i>
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="w-full rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 mb-4 text-sm">
+                        @errorMessage
+                    </div>
+                }
+
+                <form class="text-center w-full">
+                    @if (!requires2FA)
+                    {
+                        <div class="mb-4">
+                            <input @bind="email" @bind:event="oninput"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                                   type="email" name="email" placeholder="Email" @onkeypress="HandleKeyPress" />
+                        </div>
+                        <div class="mb-4">
+                            <input @bind="password" @bind:event="oninput"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                                   type="password" name="password" placeholder="Password" @onkeypress="HandleKeyPress" />
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="w-full rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 mb-4 text-sm">
+                            <i class="fas fa-shield-alt mr-2"></i>
+                            Two-factor authentication required
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-left text-sm text-slate-300 mb-1">Email</label>
+                            <input @bind="email"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-400 cursor-not-allowed"
+                                   type="email" readonly />
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-left text-sm text-slate-300 mb-1">Verification Code</label>
+                            <input @bind="twoFactorCode" @bind:event="oninput"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-center tracking-widest placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                                   type="text"
+                                   placeholder="Enter 6-digit code"
+                                   maxlength="6"
+                                   @onkeypress="HandleKeyPress"
+                                   autofocus />
+                            <small class="text-slate-500 text-xs mt-1 block">Enter the code from your authenticator app</small>
+                        </div>
+                    }
+
+                    <div class="mb-4">
+                        <button @onclick="DoLogin"
+                                class="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                type="button" disabled="@isLoggingIn">
+                            @if (isLoggingIn)
+                            {
+                                <span class="tw-spinner inline-block w-4 h-4 mr-2 align-middle"></span>
+                            }
+                            @(requires2FA ? "Verify" : "Login")
+                        </button>
+                    </div>
+
+                    @if (requires2FA)
+                    {
+                        <button @onclick="CancelTwoFactor" class="text-orange-400 hover:text-orange-300 text-sm transition-colors" type="button">
+                            <i class="fas fa-arrow-left mr-1"></i> Back to login
+                        </button>
+                    }
+                    else
+                    {
+                        <a href="forgot-password" class="text-orange-400 hover:text-orange-300 text-sm cursor-pointer transition-colors"
+                           @onclick:preventDefault @onclick='() => NavHelper.NavigateTo("/forgot-password")'>
+                            Forgot your password?
+                        </a>
+                    }
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private bool isLoggingIn = false;
+    private bool requires2FA = false;
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string twoFactorCode = string.Empty;
+    private string? errorMessage;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Check if setup is required
+            try
+            {
+                var setupStatus = await Http.GetFromJsonAsync<Authorization_SetupStatusDTO>("/api/Auth/setup/status");
+                if (setupStatus?.IsSetupRequired == true)
+                {
+                    NavHelper.NavigateTo("/setup", forceLoad: false);
+                    return;
+                }
+            }
+            catch
+            {
+                // If setup check fails, continue to normal login
+            }
+
+            // Check if user is already authenticated via HttpOnly cookie
+            var isValid = await ValidateSession();
+            if (isValid)
+            {
+                NavHelper.NavigateTo("", forceLoad: false);
+            }
+        }
+    }
+
+    private async Task HandleKeyPress(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await DoLogin();
+        }
+    }
+
+    private async Task DoLogin()
+    {
+        isLoggingIn = true;
+        errorMessage = null;
+
+        var loginDto = new Authorization_UserLoginDTO
+        {
+            Email = email,
+            Password = password,
+            TwoFactorCode = requires2FA ? twoFactorCode : null
+        };
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/Auth/login", loginDto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<Authorization_LoginResponseDTO>();
+
+                if (result?.RequiresTwoFactor == true)
+                {
+                    // User needs 2FA verification
+                    requires2FA = true;
+                    errorMessage = null;
+                }
+                else if (result != null && !result.RequiresTwoFactor)
+                {
+                    // Login successful
+                    int existingServerId = await LocalStorage.GetItemAsync<int>("activeServerId");
+                    if (existingServerId == 0 && result.SelectedServerId.HasValue && result.SelectedServerId.Value > 0)
+                    {
+                        await LocalStorage.SetItemAsStringAsync("activeServerId", result.SelectedServerId.Value.ToString());
+                    }
+
+                    NavHelper.NavigateTo("");
+                }
+                else
+                {
+                    errorMessage = "Login failed. Invalid response from server.";
+                }
+            }
+            else
+            {
+                try
+                {
+                    var result = await response.Content.ReadFromJsonAsync<Authorization_LoginResponseDTO>();
+                    errorMessage = result?.Message ?? "Login failed. Please check your credentials.";
+
+                    if (result?.RequiresTwoFactor != true)
+                    {
+                        requires2FA = false;
+                        twoFactorCode = string.Empty;
+                    }
+                }
+                catch
+                {
+                    errorMessage = "Login failed. Please check your credentials.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Login error: {ex.Message}");
+            errorMessage = "An unexpected error occurred. Please try again.";
+        }
+        finally
+        {
+            isLoggingIn = false;
+        }
+    }
+
+    private void CancelTwoFactor()
+    {
+        requires2FA = false;
+        twoFactorCode = string.Empty;
+        password = string.Empty;
+        errorMessage = null;
+    }
+
+    private async Task<bool> ValidateSession()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/api/Auth/verify");
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+}

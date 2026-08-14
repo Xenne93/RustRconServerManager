@@ -1,0 +1,12 @@
+{
+  "name": "RustRconServerManager-frontend",
+  "version": "1.0.0",
+  "description": "RustRconServerManager Frontend Tailwind CSS build",
+  "scripts": {
+    "build:css": "npx tailwindcss -i ./wwwroot/css/tailwind-input.css -o ./wwwroot/css/tailwind-output.css --minify",
+    "watch:css": "npx tailwindcss -i ./wwwroot/css/tailwind-input.css -o ./wwwroot/css/tailwind-output.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

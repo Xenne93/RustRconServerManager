@@ -1,0 +1,1705 @@
+@page "/players"
+@page "/PlayerList"
+@using Microsoft.AspNetCore.Authorization
+@using Blazored.LocalStorage
+@using Blazored.SessionStorage
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Frontend.Components.Auth
+@using RustRconServerManager.Frontend.Components
+@using RustRconServerManager.Frontend.Components.UI
+@using RustRconServerManager.Frontend.Utilities
+@using RustRconServerManager.Shared.PlayerList
+@using RustRconServerManager.Shared.PlayerNotes
+@using RustRconServerManager.Frontend.Services
+@inject HttpClient Http
+@inject ILocalStorageService LocalStorage
+@inject ISessionStorageService SessionStorage
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ServerValidationHelper ServerValidationHelper
+@implements IAsyncDisposable
+
+@attribute [Authorize]
+<PageAccessGuard PageRoute="players">
+
+<ContentWrapper>
+    @* Header *@
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Player List</h1>
+            @if (playerListData != null)
+            {
+                <p class="text-slate-400 text-sm mt-1">
+                    @(playerListData.TotalOnline + playerListData.TotalOffline) total players
+                    &bull; @playerListData.TotalOnline online
+                    &bull; @playerListData.TotalBanned banned
+                </p>
+            }
+        </div>
+    </div>
+
+    @* Quick Stats *@
+    @if (playerListData != null)
+    {
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4">
+                <p class="text-xs text-slate-400 uppercase tracking-wider">Total Players</p>
+                <p class="text-2xl font-bold text-white mt-1">@(playerListData.TotalOnline + playerListData.TotalOffline)</p>
+            </div>
+            <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <p class="text-xs text-emerald-400 uppercase tracking-wider">Online Now</p>
+                <p class="text-2xl font-bold text-emerald-400 mt-1">@playerListData.TotalOnline</p>
+            </div>
+            <div class="rounded-lg border border-slate-500/30 bg-slate-500/10 p-4">
+                <p class="text-xs text-slate-400 uppercase tracking-wider">Offline</p>
+                <p class="text-2xl font-bold text-slate-400 mt-1">@playerListData.TotalOffline</p>
+            </div>
+            <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                <p class="text-xs text-red-400 uppercase tracking-wider">Banned</p>
+                <p class="text-2xl font-bold text-red-400 mt-1">@playerListData.TotalBanned</p>
+            </div>
+        </div>
+    }
+
+    @* Search Bar + Page Size *@
+    <div class="mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="relative flex-1 max-w-md">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+            <input type="text"
+                   class="w-full pl-9 pr-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                   placeholder="Search players by name, Steam ID, country, or IP..."
+                   value="@searchTerm"
+                   @oninput="OnSearchInput" />
+        </div>
+        <div class="flex items-center gap-2">
+            <label class="text-xs text-slate-400 whitespace-nowrap">Per page</label>
+            <select class="px-3 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                    value="@pageSize"
+                    @onchange="OnPageSizeChanged">
+                <option value="100">100</option>
+                <option value="200">200</option>
+                <option value="500">500</option>
+            </select>
+        </div>
+    </div>
+
+    @if (playerListData == null)
+    {
+        <div class="tw-card">
+            <div class="tw-card-body">
+                <div class="text-center py-8">
+                    <div class="tw-spinner mx-auto mb-3"></div>
+                    <p class="text-slate-500 text-sm">Loading player data...</p>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        @* Online Players Section *@
+        <div class="tw-card mb-6">
+            <div class="tw-card-header">
+                <div class="flex items-center gap-2">
+                    <div class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <span class="text-sm font-semibold text-white">Online Players (@playerListData.TotalOnline)</span>
+                </div>
+                <span class="text-xs text-slate-500">Click a row for actions</span>
+            </div>
+            @if (playerListData.OnlinePlayers.Count == 0)
+            {
+                <div class="tw-card-body">
+                    <p class="text-slate-500 text-sm">No players online</p>
+                </div>
+            }
+            else
+            {
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-700/50 bg-slate-800/20">
+                                <th class="px-3 py-2.5 text-left"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Name)">Player @GetSortIcon(ColumnHeaders.Name)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden xl:table-cell"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Steam ID</span></th>
+                                <th class="px-3 py-2.5 text-left"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Ping)">Ping @GetSortIcon(ColumnHeaders.Ping)</button></th>
+                                <th class="px-3 py-2.5 text-left"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Health)">HP @GetSortIcon(ColumnHeaders.Health)</button></th>
+                                <th class="px-3 py-2.5 text-left"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Country)">Country @GetSortIcon(ColumnHeaders.Country)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden lg:table-cell"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.SteamAge)">Steam Age @GetSortIcon(ColumnHeaders.SteamAge)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden lg:table-cell"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.RustHours)">Rust Hours @GetSortIcon(ColumnHeaders.RustHours)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden lg:table-cell"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.IP)">IP @GetSortIcon(ColumnHeaders.IP)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden xl:table-cell"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Team</span></th>
+                                <th class="px-3 py-2.5 text-left hidden xl:table-cell"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">VAC</span></th>
+                                <th class="px-3 py-2.5 text-left hidden xl:table-cell"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.FirstSeen)">First Seen @GetSortIcon(ColumnHeaders.FirstSeen)</button></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var player in SortPlayers(FilterPlayers(playerListData.OnlinePlayers)))
+                            {
+                                <tr class="border-b border-slate-700/30 hover:bg-slate-800/40 transition-colors cursor-pointer @GetPlayerRowClass(player)" @onclick="() => OpenPlayerActionsModal(player)">
+                                    <td class="px-3 py-2.5">
+                                        <div class="flex items-center gap-2.5">
+                                            <div class="relative shrink-0">
+                                                @if (!string.IsNullOrEmpty(player.Avatar))
+                                                {
+                                                    <img src="@player.Avatar" alt="@player.Name" class="w-8 h-8 rounded-lg object-cover" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500/30 to-amber-600/30 flex items-center justify-center">
+                                                        <span class="text-xs font-bold text-orange-300">@(player.Name?.Length > 0 ? player.Name[0].ToString().ToUpper() : "?")</span>
+                                                    </div>
+                                                }
+                                                <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-slate-900"></div>
+                                            </div>
+                                            <span class="font-medium text-white text-sm truncate max-w-[160px]">@player.Name</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden xl:table-cell"><span class="font-mono text-xs text-slate-500">@player.SteamId</span></td>
+                                    <td class="px-3 py-2.5">
+                                        @if (player.CurrentPing.HasValue)
+                                        { <span class="text-xs text-slate-300">@player.CurrentPing ms</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5">
+                                        @if (player.Health.HasValue)
+                                        { <span class="text-xs text-slate-300">@player.Health.Value.ToString("F0")</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5">
+                                        @if (!string.IsNullOrEmpty(player.Country))
+                                        {
+                                            var flagUrl = CountryFlagHelper.GetFlagImageUrl(player.Country);
+                                            <div class="flex items-center gap-1.5">
+                                                @if (!string.IsNullOrEmpty(flagUrl))
+                                                { <img src="@flagUrl" alt="@player.Country" title="@player.Country" class="w-5 h-3.5 rounded-sm" /> }
+                                                <span class="text-xs text-slate-400">@player.Country</span>
+                                                @if (player.IsVpn)
+                                                { <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">VPN</span> }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @if (player.IsVpn)
+                                            { <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">VPN</span> }
+                                            else
+                                            { <span class="text-slate-600">-</span> }
+                                        }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden lg:table-cell">
+                                        @if (player.SteamAccountCreated.HasValue)
+                                        { <span class="text-xs text-slate-300">@GetSteamAge(player.SteamAccountCreated.Value)</span> }
+                                        else if (player.ProfileVisibility == 1)
+                                        { <span class="text-xs text-slate-500">Private</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden lg:table-cell">
+                                        @if (player.RustPlaytimeMinutes.HasValue)
+                                        { var hours = player.RustPlaytimeMinutes.Value / 60.0;
+                                            <span class="text-xs text-slate-300">@hours.ToString("N0")h</span> }
+                                        else if (player.ProfileVisibility == 1)
+                                        { <span class="text-xs text-slate-500">Private</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden lg:table-cell">
+                                        @if (!string.IsNullOrEmpty(player.LastIp))
+                                        {
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="font-mono text-xs text-slate-400">@player.LastIp</span>
+                                                @if (player.IsVpn)
+                                                { <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">VPN</span> }
+                                            </div>
+                                        }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden xl:table-cell">
+                                        @if (player.TeamId.HasValue && player.TeamId.Value != 0)
+                                        { <span class="text-xs text-slate-300">@player.TeamId</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden xl:table-cell">
+                                        @if (player.VACBanned && player.NumberOfVACBans.HasValue && player.NumberOfVACBans.Value > 0)
+                                        { <span class="tw-badge-danger text-[10px]">@player.NumberOfVACBans</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden xl:table-cell"><span class="text-xs text-slate-500">@player.FirstSeen.ToLocalTime().ToString("dd-MM-yyyy")</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="px-3 py-2 border-t border-slate-700/50 bg-slate-800/20">
+                    <p class="text-xs text-slate-500">Showing @FilterPlayers(playerListData.OnlinePlayers).Count of @playerListData.OnlinePlayers.Count online players</p>
+                </div>
+            }
+        </div>
+
+        @* Offline Players Section *@
+        <div class="tw-card">
+            <div class="tw-card-header">
+                <div class="flex items-center gap-2">
+                    <div class="w-2.5 h-2.5 bg-slate-500 rounded-full"></div>
+                    <span class="text-sm font-semibold text-white">Offline Players (@playerListData.TotalOffline)</span>
+                </div>
+                <span class="text-xs text-slate-500">Click a row for actions</span>
+            </div>
+            @if (playerListData.OfflinePlayers.Count == 0)
+            {
+                <div class="tw-card-body">
+                    <p class="text-slate-500 text-sm">No offline players</p>
+                </div>
+            }
+            else
+            {
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-700/50 bg-slate-800/20">
+                                <th class="px-3 py-2.5 text-left"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Name)">Player @GetSortIcon(ColumnHeaders.Name)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden xl:table-cell"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Steam ID</span></th>
+                                <th class="px-3 py-2.5 text-left"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Country)">Country @GetSortIcon(ColumnHeaders.Country)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden lg:table-cell"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.SteamAge)">Steam Age @GetSortIcon(ColumnHeaders.SteamAge)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden lg:table-cell"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.RustHours)">Rust Hours @GetSortIcon(ColumnHeaders.RustHours)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden lg:table-cell"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.IP)">IP @GetSortIcon(ColumnHeaders.IP)</button></th>
+                                <th class="px-3 py-2.5 text-left hidden xl:table-cell"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">VAC</span></th>
+                                <th class="px-3 py-2.5 text-left"><button class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.LastSeen)">Last Seen @GetSortIcon(ColumnHeaders.LastSeen)</button></th>
+                                <th class="px-3 py-2.5 text-left"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var player in SortPlayers(playerListData.OfflinePlayers))
+                            {
+                                <tr class="border-b border-slate-700/30 hover:bg-slate-800/40 transition-colors cursor-pointer @GetPlayerRowClass(player)" @onclick="() => OpenPlayerActionsModal(player)">
+                                    <td class="px-3 py-2.5">
+                                        <div class="flex items-center gap-2.5">
+                                            <div class="relative shrink-0">
+                                                @if (!string.IsNullOrEmpty(player.Avatar))
+                                                {
+                                                    <img src="@player.Avatar" alt="@player.Name" class="w-8 h-8 rounded-lg object-cover opacity-60" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-600/30 to-slate-700/30 flex items-center justify-center">
+                                                        <span class="text-xs font-bold text-slate-500">@(player.Name?.Length > 0 ? player.Name[0].ToString().ToUpper() : "?")</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                            <span class="font-medium text-slate-300 text-sm truncate max-w-[160px]">@player.Name</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden xl:table-cell"><span class="font-mono text-xs text-slate-500">@player.SteamId</span></td>
+                                    <td class="px-3 py-2.5">
+                                        @if (!string.IsNullOrEmpty(player.Country))
+                                        {
+                                            var flagUrl = CountryFlagHelper.GetFlagImageUrl(player.Country);
+                                            <div class="flex items-center gap-1.5">
+                                                @if (!string.IsNullOrEmpty(flagUrl))
+                                                { <img src="@flagUrl" alt="@player.Country" title="@player.Country" class="w-5 h-3.5 rounded-sm" /> }
+                                                <span class="text-xs text-slate-400">@player.Country</span>
+                                                @if (player.IsVpn)
+                                                { <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">VPN</span> }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @if (player.IsVpn)
+                                            { <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">VPN</span> }
+                                            else
+                                            { <span class="text-slate-600">-</span> }
+                                        }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden lg:table-cell">
+                                        @if (player.SteamAccountCreated.HasValue)
+                                        { <span class="text-xs text-slate-400">@GetSteamAge(player.SteamAccountCreated.Value)</span> }
+                                        else if (player.ProfileVisibility == 1)
+                                        { <span class="text-xs text-slate-500">Private</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden lg:table-cell">
+                                        @if (player.RustPlaytimeMinutes.HasValue)
+                                        { var hours = player.RustPlaytimeMinutes.Value / 60.0;
+                                            <span class="text-xs text-slate-400">@hours.ToString("N0")h</span> }
+                                        else if (player.ProfileVisibility == 1)
+                                        { <span class="text-xs text-slate-500">Private</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden lg:table-cell">
+                                        @if (!string.IsNullOrEmpty(player.LastIp))
+                                        {
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="font-mono text-xs text-slate-400">@player.LastIp</span>
+                                                @if (player.IsVpn)
+                                                { <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">VPN</span> }
+                                            </div>
+                                        }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5 hidden xl:table-cell">
+                                        @if (player.VACBanned && player.NumberOfVACBans.HasValue && player.NumberOfVACBans.Value > 0)
+                                        { <span class="tw-badge-danger text-[10px]">@player.NumberOfVACBans</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                    <td class="px-3 py-2.5"><span class="text-xs text-slate-500">@player.LastSeen.ToLocalTime().ToString("dd-MM-yyyy HH:mm")</span></td>
+                                    <td class="px-3 py-2.5">
+                                        @if (player.IsBanned)
+                                        { <span class="tw-badge-danger text-[10px]">Banned</span> }
+                                        else
+                                        { <span class="text-slate-600">-</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="px-3 py-2 border-t border-slate-700/50 bg-slate-800/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <p class="text-xs text-slate-500">
+                        @{
+                            var start = playerListData.OfflineFilteredTotal == 0 ? 0 : ((playerListData.OfflinePage - 1) * playerListData.OfflinePageSize) + 1;
+                            var end = Math.Min(playerListData.OfflinePage * playerListData.OfflinePageSize, playerListData.OfflineFilteredTotal);
+                        }
+                        Showing @start-@end of @playerListData.OfflineFilteredTotal@(string.IsNullOrWhiteSpace(searchTerm) ? "" : " filtered") offline players
+                    </p>
+                    @{
+                        var totalPages = Math.Max(1, (int)Math.Ceiling((double)playerListData.OfflineFilteredTotal / playerListData.OfflinePageSize));
+                    }
+                    @if (totalPages > 1)
+                    {
+                        <div class="flex items-center gap-1">
+                            <button class="px-2 py-1 rounded border border-slate-700 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled="@(offlinePage <= 1)"
+                                    @onclick="() => GoToPage(1)">
+                                <i class="fas fa-angle-double-left"></i>
+                            </button>
+                            <button class="px-2 py-1 rounded border border-slate-700 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled="@(offlinePage <= 1)"
+                                    @onclick="() => GoToPage(offlinePage - 1)">
+                                <i class="fas fa-angle-left"></i>
+                            </button>
+                            <span class="px-2 text-xs text-slate-400">Page @offlinePage of @totalPages</span>
+                            <button class="px-2 py-1 rounded border border-slate-700 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled="@(offlinePage >= totalPages)"
+                                    @onclick="() => GoToPage(offlinePage + 1)">
+                                <i class="fas fa-angle-right"></i>
+                            </button>
+                            <button class="px-2 py-1 rounded border border-slate-700 text-xs text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled="@(offlinePage >= totalPages)"
+                                    @onclick="() => GoToPage(totalPages)">
+                                <i class="fas fa-angle-double-right"></i>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+</ContentWrapper>
+</PageAccessGuard>
+
+@* Player Actions Modal *@
+<TwModal @bind-IsOpen="showPlayerActionsModal" Title="Player Actions" Size="sm">
+    <ChildContent>
+        @if (selectedPlayerForActions != null)
+        {
+            <div class="flex items-center gap-3 mb-5 pb-4 border-b border-slate-700/50">
+                <div class="relative shrink-0">
+                    @if (!string.IsNullOrEmpty(selectedPlayerForActions.Avatar))
+                    {
+                        <img src="@selectedPlayerForActions.Avatar" alt="@selectedPlayerForActions.Name" class="w-12 h-12 rounded-lg object-cover" />
+                    }
+                    else
+                    {
+                        <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-orange-500/30 to-amber-600/30 flex items-center justify-center">
+                            <span class="text-sm font-bold text-orange-300">@(selectedPlayerForActions.Name?.Length > 0 ? selectedPlayerForActions.Name[0].ToString().ToUpper() : "?")</span>
+                        </div>
+                    }
+                    @if (IsPlayerOnline(selectedPlayerForActions))
+                    {
+                        <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900"></div>
+                    }
+                </div>
+                <div class="min-w-0">
+                    <p class="text-white font-semibold text-sm truncate">@selectedPlayerForActions.Name</p>
+                    <p class="text-slate-500 text-xs font-mono">@selectedPlayerForActions.SteamId</p>
+                </div>
+                @if (selectedPlayerForActions.IsBanned)
+                {
+                    <span class="tw-badge-danger text-[10px] ml-auto">Banned</span>
+                }
+            </div>
+
+            <div class="space-y-1.5">
+                @* Navigation Actions *@
+                <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors text-left"
+                        @onclick="() => NavigateToInspect(selectedPlayerForActions)">
+                    <i class="fas fa-user w-4 text-center text-blue-400"></i>
+                    <span>Inspect Player</span>
+                </button>
+
+                <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors text-left"
+                        @onclick="() => { ClosePlayerActionsModal(); OpenNotesDialog(selectedPlayerForActions); }">
+                    <i class="fas fa-sticky-note w-4 text-center text-amber-400"></i>
+                    <span>Notes</span>
+                </button>
+
+                <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors text-left"
+                        @onclick="() => { ClosePlayerActionsModal(); NavigateToPlayerReports(selectedPlayerForActions.SteamId); }">
+                    <i class="fas fa-flag w-4 text-center text-orange-400"></i>
+                    <span>Reports</span>
+                </button>
+
+                <a href="https://steamcommunity.com/profiles/@selectedPlayerForActions.SteamId" target="_blank"
+                   class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors">
+                    <i class="fab fa-steam w-4 text-center text-slate-400"></i>
+                    <span>Steam Profile</span>
+                    <i class="fas fa-external-link-alt text-[10px] text-slate-600 ml-auto"></i>
+                </a>
+
+                @if (IsPlayerOnline(selectedPlayerForActions))
+                {
+                    <div class="border-t border-slate-700/50 my-2"></div>
+
+                    <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors text-left"
+                            @onclick="async () => { ClosePlayerActionsModal(); await OpenGiveItemDialog(selectedPlayerForActions); }">
+                        <i class="fas fa-gift w-4 text-center text-emerald-400"></i>
+                        <span>Give Item</span>
+                    </button>
+
+                    <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors text-left"
+                            @onclick="() => { ClosePlayerActionsModal(); OpenKickDialog(selectedPlayerForActions); }">
+                        <i class="fas fa-right-from-bracket w-4 text-center text-amber-400"></i>
+                        <span>Kick</span>
+                    </button>
+
+                    <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/60 hover:text-white transition-colors text-left"
+                            @onclick="async () => { ClosePlayerActionsModal(); await KillPlayer(selectedPlayerForActions); }">
+                        <i class="fas fa-skull w-4 text-center text-red-400"></i>
+                        <span>Kill</span>
+                    </button>
+                }
+
+                <div class="border-t border-slate-700/50 my-2"></div>
+
+                @if (selectedPlayerForActions.IsBanned)
+                {
+                    <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-emerald-400 hover:bg-emerald-500/10 transition-colors text-left"
+                            @onclick="() => { ClosePlayerActionsModal(); OpenUnbanConfirmDialog(selectedPlayerForActions); }">
+                        <i class="fas fa-lock-open w-4 text-center"></i>
+                        <span>Unban Player</span>
+                    </button>
+                }
+                else
+                {
+                    <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                            @onclick="() => { ClosePlayerActionsModal(); OpenBanDialog(selectedPlayerForActions); }">
+                        <i class="fas fa-gavel w-4 text-center"></i>
+                        <span>Ban Player</span>
+                    </button>
+                }
+
+                <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                        @onclick="() => { ClosePlayerActionsModal(); OpenClearDataModal(selectedPlayerForActions); }">
+                    <i class="fas fa-trash-alt w-4 text-center"></i>
+                    <span>Clear Player Data</span>
+                </button>
+            </div>
+        }
+    </ChildContent>
+</TwModal>
+
+@* Ban Player Modal *@
+<TwModal @bind-IsOpen="showBanModal" Title="@($"Ban Player: {selectedPlayerForBan?.Name ?? ""}")" Size="default">
+    <ChildContent>
+        @if (selectedPlayerForBan != null)
+        {
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Ban Reason *</label>
+                    <textarea class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                              rows="3" @bind="banReason" placeholder="Enter reason for ban..."></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Ban Duration</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Hours</label>
+                            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                   min="0" @bind="banDurationHours" />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Days</label>
+                            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                   min="0" @bind="banDurationDays" />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Weeks</label>
+                            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                   min="0" @bind="banDurationWeeks" />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Months</label>
+                            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                   min="0" @bind="banDurationMonths" />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Years</label>
+                            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                   min="0" @bind="banDurationYears" />
+                        </div>
+                        <div class="flex items-end">
+                            <span class="text-xs text-slate-500 pb-2">Total: @GetTotalBanHours() hours</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Internal Note <span class="text-slate-500 font-normal">(optional)</span></label>
+                    <textarea class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                              rows="2" @bind="banInternalNote" placeholder="Add an internal note (only visible to panel admins)..."></textarea>
+                </div>
+
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500/50" @bind="isGlobalBan" />
+                    <span class="text-sm text-slate-300">Global Ban <span class="text-slate-500">(Ban across all servers)</span></span>
+                </label>
+            </div>
+        }
+    </ChildContent>
+    <FooterContent>
+        <button class="tw-btn-ghost px-4 py-2 text-sm" @onclick="CloseBanDialog">Cancel</button>
+        <button class="tw-btn-warning px-4 py-2 text-sm" @onclick="ConfirmBanPlayer"
+                disabled="@(string.IsNullOrWhiteSpace(banReason) || GetTotalBanHours() == 0)">
+            <i class="fas fa-gavel mr-2"></i>Ban Player
+        </button>
+    </FooterContent>
+</TwModal>
+
+@* Confirm Ban Modal *@
+<TwModal @bind-IsOpen="showConfirmBanModal" Title="Confirm Ban" Size="default">
+    <ChildContent>
+        <p class="text-slate-300">Are you sure you want to ban <strong class="text-white">@selectedPlayerForBan?.Name</strong>?</p>
+        <div class="mt-4 rounded-lg bg-amber-500/10 border border-amber-500/30 p-4">
+            <p class="text-sm font-semibold text-amber-400 mb-1">Ban Details:</p>
+            <div class="text-xs text-slate-400 space-y-0.5">
+                <p>Reason: @banReason</p>
+                <p>Duration: @GetTotalBanHours() hours</p>
+                <p>Global Ban: @(isGlobalBan ? "Yes" : "No")</p>
+            </div>
+        </div>
+        <p class="text-red-400 text-sm font-semibold mt-4">This action cannot be undone.</p>
+    </ChildContent>
+    <FooterContent>
+        <button class="tw-btn-ghost px-4 py-2 text-sm" @onclick="CancelBan">Cancel</button>
+        <button class="tw-btn-danger px-4 py-2 text-sm" @onclick="ExecuteBan">
+            <i class="fas fa-gavel mr-2"></i>Confirm Ban
+        </button>
+    </FooterContent>
+</TwModal>
+
+@* Unban Confirmation Modal *@
+<TwModal @bind-IsOpen="showUnbanModal" Title="Confirm Unban" Size="default">
+    <ChildContent>
+        <p class="text-slate-300">Are you sure you want to unban <strong class="text-white">@selectedPlayerForUnban?.Name</strong>?</p>
+        @if (selectedPlayerForUnban?.IsBanned == true)
+        {
+            <div class="mt-4 rounded-lg bg-blue-500/10 border border-blue-500/30 p-4">
+                <div class="text-xs text-slate-400">
+                    <strong class="text-blue-400">Ban Reason:</strong> @selectedPlayerForUnban?.BanReason
+                </div>
+            </div>
+        }
+        <p class="text-sm font-semibold text-slate-300 mt-4">This will remove the ban.</p>
+    </ChildContent>
+    <FooterContent>
+        <button class="tw-btn-ghost px-4 py-2 text-sm" @onclick="CloseUnbanConfirmDialog">Cancel</button>
+        <button class="tw-btn-warning px-4 py-2 text-sm" @onclick="ConfirmUnbanPlayer">
+            <i class="fas fa-lock-open mr-2"></i>Confirm Unban
+        </button>
+    </FooterContent>
+</TwModal>
+
+@* Give Item Dialog *@
+<GiveItemDialog @ref="giveItemDialog" OnItemGiven="OnItemGiven" />
+
+@* Kick Player Modal *@
+<TwModal @bind-IsOpen="showKickModal" Title="@($"Kick Player: {selectedPlayerForKick?.Name ?? ""}")" Size="default">
+    <ChildContent>
+        @if (selectedPlayerForKick != null)
+        {
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Kick Reason</label>
+                <textarea class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                          rows="3" @bind="kickReason" placeholder="Enter reason for kick (optional)..."></textarea>
+            </div>
+        }
+    </ChildContent>
+    <FooterContent>
+        <button class="tw-btn-ghost px-4 py-2 text-sm" @onclick="CloseKickDialog">Cancel</button>
+        <button class="tw-btn-danger px-4 py-2 text-sm" @onclick="ConfirmKickPlayer">
+            <i class="fas fa-ban mr-2"></i>Kick Player
+        </button>
+    </FooterContent>
+</TwModal>
+
+@* Player Notes Modal *@
+<TwModal @bind-IsOpen="showNotesModal" Title="@($"Notes: {selectedPlayerForNotes?.Name ?? ""}")" Size="lg" MaxHeight="60vh">
+    <ChildContent>
+        @if (isLoadingNotes)
+        {
+            <div class="text-center py-8">
+                <div class="tw-spinner mx-auto mb-3"></div>
+                <p class="text-slate-500 text-sm">Loading notes...</p>
+            </div>
+        }
+        else if (selectedPlayerForNotes != null)
+        {
+            @* Add New Note Form *@
+            @if (showNoteForm)
+            {
+                <div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4 mb-4">
+                    <p class="text-sm font-semibold text-white mb-3">@(editingNoteId.HasValue ? "Edit Note" : "Add New Note")</p>
+                    <textarea class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 mb-3"
+                              rows="4" @bind="newNoteText" placeholder="Enter your note here..."></textarea>
+                    <div class="flex gap-2">
+                        <button class="tw-btn-primary px-3 py-1.5 text-sm" @onclick="SaveNote" disabled="@isSavingNote">
+                            @if (isSavingNote)
+                            {
+                                <div class="tw-spinner w-3 h-3 mr-2"></div>
+                            }
+                            <i class="fas fa-save mr-1"></i>@(editingNoteId.HasValue ? "Update" : "Save")
+                        </button>
+                        <button class="tw-btn-ghost px-3 py-1.5 text-sm" @onclick="CancelNoteEdit">
+                            <i class="fas fa-times mr-1"></i>Cancel
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <button class="tw-btn-primary px-3 py-1.5 text-sm mb-4" @onclick="() => { showNoteForm = true; editingNoteId = null; newNoteText = string.Empty; }">
+                    <i class="fas fa-plus mr-1"></i>Add New Note
+                </button>
+            }
+
+            @* Notes List *@
+            @if (playerNotes.Count == 0)
+            {
+                <div class="rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 text-sm">
+                    <i class="fas fa-info-circle mr-2"></i>No notes for this player yet.
+                </div>
+            }
+            else
+            {
+                <div class="space-y-3">
+                    @foreach (var note in playerNotes)
+                    {
+                        <div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="text-xs text-slate-500">
+                                    <i class="fas fa-user mr-1"></i>@note.CreatedBy
+                                    <i class="fas fa-clock ml-2 mr-1"></i>@note.CreatedAt.ToLocalTime().ToString("dd-MM-yyyy HH:mm")
+                                    @if (note.UpdatedAt != note.CreatedAt)
+                                    {
+                                        <span class="ml-2">(edited: @note.UpdatedAt.ToLocalTime().ToString("dd-MM-yyyy HH:mm"))</span>
+                                    }
+                                </div>
+                                <div class="flex gap-1">
+                                    <button class="h-7 w-7 flex items-center justify-center rounded text-slate-400 hover:text-blue-400 hover:bg-slate-700 transition-colors" @onclick="() => EditNote(note)">
+                                        <i class="fas fa-edit text-xs"></i>
+                                    </button>
+                                    <button class="h-7 w-7 flex items-center justify-center rounded text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors" @onclick="() => DeleteNote(note.Id)">
+                                        <i class="fas fa-trash text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="text-sm text-slate-300 whitespace-pre-wrap break-words rounded bg-slate-900/50 border border-slate-700/30 p-3">
+                                @note.Note
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </ChildContent>
+    <FooterContent>
+        <button class="tw-btn-ghost px-4 py-2 text-sm" @onclick="CloseNotesDialog">Close</button>
+    </FooterContent>
+</TwModal>
+
+@* Clear Player Data Modal *@
+<TwModal @bind-IsOpen="showClearDataModal" Title="Clear Player Data" Size="default">
+    <ChildContent>
+        @if (!string.IsNullOrEmpty(clearDataError))
+        {
+            <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm mb-4">@clearDataError</div>
+        }
+        @if (!string.IsNullOrEmpty(clearDataSuccess))
+        {
+            <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 text-sm mb-4">@clearDataSuccess</div>
+        }
+
+        <p class="text-sm text-slate-400 mb-4">Select which data to clear for <span class="text-white font-medium">@clearDataPlayerName</span>:</p>
+
+        <div class="space-y-2">
+            <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/40 cursor-pointer transition-colors">
+                <input type="checkbox" @bind="clearChat" class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-orange-500 focus:ring-orange-500/50" />
+                <i class="fas fa-comments w-4 text-center text-blue-400"></i>
+                <span class="text-sm text-slate-300">Chat Messages</span>
+            </label>
+            <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/40 cursor-pointer transition-colors">
+                <input type="checkbox" @bind="clearKills" class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-orange-500 focus:ring-orange-500/50" />
+                <i class="fas fa-crosshairs w-4 text-center text-orange-400"></i>
+                <span class="text-sm text-slate-300">Kills</span>
+            </label>
+            <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/40 cursor-pointer transition-colors">
+                <input type="checkbox" @bind="clearDeaths" class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-orange-500 focus:ring-orange-500/50" />
+                <i class="fas fa-skull w-4 text-center text-red-400"></i>
+                <span class="text-sm text-slate-300">Deaths</span>
+            </label>
+            <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/40 cursor-pointer transition-colors">
+                <input type="checkbox" @bind="clearNotes" class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-orange-500 focus:ring-orange-500/50" />
+                <i class="fas fa-sticky-note w-4 text-center text-amber-400"></i>
+                <span class="text-sm text-slate-300">Notes</span>
+            </label>
+            <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/40 cursor-pointer transition-colors">
+                <input type="checkbox" @bind="clearReports" class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-orange-500 focus:ring-orange-500/50" />
+                <i class="fas fa-flag w-4 text-center text-orange-400"></i>
+                <span class="text-sm text-slate-300">Reports</span>
+            </label>
+            <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800/40 cursor-pointer transition-colors">
+                <input type="checkbox" @bind="clearBanHistory" class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-orange-500 focus:ring-orange-500/50" />
+                <i class="fas fa-gavel w-4 text-center text-slate-400"></i>
+                <span class="text-sm text-slate-300">Ban History</span>
+            </label>
+        </div>
+
+        <div class="mt-5 pt-4 border-t border-slate-700/50">
+            <p class="text-xs text-red-400/80 mb-3"><i class="fas fa-exclamation-triangle mr-1"></i>The action below will permanently remove the player entry and ALL associated data.</p>
+            <button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 transition-colors"
+                    @onclick="DeletePlayerAndAllData" disabled="@isClearingData">
+                @if (isClearingData)
+                {
+                    <div class="tw-spinner w-3 h-3"></div>
+                }
+                <i class="fas fa-user-times"></i>
+                <span>Delete Player + All Data</span>
+            </button>
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2">
+            <button type="button" class="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors" @onclick="() => showClearDataModal = false">
+                Cancel
+            </button>
+            <button type="button" class="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors disabled:opacity-50"
+                    @onclick="ClearSelectedPlayerData" disabled="@(isClearingData || !AnyClearOptionSelected)">
+                @if (isClearingData)
+                {
+                    <i class="fas fa-spinner fa-spin mr-2"></i>
+                }
+                Clear Selected Data
+            </button>
+        </div>
+    </FooterContent>
+</TwModal>
+
+@code {
+    // Column header constants for type-safe sorting
+    private static class ColumnHeaders
+    {
+        public const string Name = "Name";
+        public const string SteamID = "SteamID";
+        public const string Ping = "Ping";
+        public const string Health = "Health";
+        public const string Country = "Country";
+        public const string SteamAge = "SteamAge";
+        public const string RustHours = "RustHours";
+        public const string IP = "IP";
+        public const string FirstSeen = "FirstSeen";
+        public const string LastSeen = "LastSeen";
+    }
+
+    private PlayerList_PlayerListDTO playerListData = null;
+    private readonly PeriodicTimer _timer = new(TimeSpan.FromSeconds(10));
+    private readonly CancellationTokenSource _cts = new();
+    private NavigationHelper NavHelper => new NavigationHelper(Nav);
+
+    // Search and sort state
+    private string searchTerm = "";
+    private string sortColumn = ColumnHeaders.Name;
+    private bool sortAscending = true;
+
+    // Pagination state
+    private int pageSize = 100;
+    private int offlinePage = 1;
+    private CancellationTokenSource? _searchDebounceCts;
+
+    // Modal visibility state (replaces Bootstrap JS)
+    private bool showPlayerActionsModal = false;
+    private bool showBanModal = false;
+    private bool showConfirmBanModal = false;
+    private bool showUnbanModal = false;
+    private bool showKickModal = false;
+    private bool showNotesModal = false;
+
+    // Player actions modal state
+    private PlayerList_PlayerDTO selectedPlayerForActions = null;
+
+    // Ban dialog state
+    private PlayerList_PlayerDTO selectedPlayerForBan = null;
+    private string banReason = "";
+    private int banDurationHours = 0;
+    private int banDurationDays = 0;
+    private int banDurationWeeks = 0;
+    private int banDurationMonths = 0;
+    private int banDurationYears = 0;
+    private string banInternalNote = "";
+    private bool isGlobalBan = false;
+
+    // Unban confirmation state
+    private PlayerList_PlayerDTO selectedPlayerForUnban = null;
+
+    // Kick dialog state
+    private PlayerList_PlayerDTO selectedPlayerForKick = null;
+    private string kickReason = "";
+
+    // Notes dialog state
+    private PlayerList_PlayerDTO selectedPlayerForNotes = null;
+    private List<PlayerNoteDTO> playerNotes = new();
+    private bool isLoadingNotes = false;
+    private bool showNoteForm = false;
+    private string newNoteText = "";
+    private bool isSavingNote = false;
+    private int? editingNoteId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        bool hasAccess = await ServerValidationHelper.ValidateActiveServerAsync();
+        if (!hasAccess)
+            return;
+
+        _ = TickLoop();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await FetchPlayerData();
+        }
+        await Task.CompletedTask;
+    }
+
+    private async Task TickLoop()
+    {
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                await FetchPlayerData();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignored: we cancel on dispose
+        }
+    }
+
+    private async Task FetchPlayerData()
+    {
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+
+            var url = $"/api/Dashboard/GetPlayerList/{serverId}?offlinePage={offlinePage}&offlinePageSize={pageSize}";
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+                url += $"&search={Uri.EscapeDataString(searchTerm)}";
+
+            var result = await Http.GetFromJsonAsync<PlayerList_PlayerListDTO>(url);
+            if (result != null)
+            {
+                playerListData = result;
+
+                // If server clamped or data shrunk below current page, step back
+                var totalPages = Math.Max(1, (int)Math.Ceiling((double)playerListData.OfflineFilteredTotal / playerListData.OfflinePageSize));
+                if (offlinePage > totalPages)
+                {
+                    offlinePage = totalPages;
+                    _ = FetchPlayerData();
+                    return;
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching player data: {ex.Message}");
+        }
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        offlinePage = 1;
+
+        _searchDebounceCts?.Cancel();
+        _searchDebounceCts = new CancellationTokenSource();
+        var token = _searchDebounceCts.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+            if (!token.IsCancellationRequested)
+                await FetchPlayerData();
+        }
+        catch (TaskCanceledException)
+        {
+            // Newer keystroke superseded this one
+        }
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size) && (size == 100 || size == 200 || size == 500))
+        {
+            pageSize = size;
+            offlinePage = 1;
+            await FetchPlayerData();
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1) page = 1;
+        if (page == offlinePage) return;
+        offlinePage = page;
+        await FetchPlayerData();
+    }
+
+    /// <summary>
+    /// Opens the player actions modal
+    /// </summary>
+    private void OpenPlayerActionsModal(PlayerList_PlayerDTO player)
+    {
+        selectedPlayerForActions = player;
+        showPlayerActionsModal = true;
+    }
+
+    /// <summary>
+    /// Closes the player actions modal
+    /// </summary>
+    private void ClosePlayerActionsModal()
+    {
+        showPlayerActionsModal = false;
+    }
+
+    /// <summary>
+    /// Checks if a player is currently online
+    /// </summary>
+    private bool IsPlayerOnline(PlayerList_PlayerDTO player)
+    {
+        return playerListData?.OnlinePlayers?.Any(p => p.SteamId == player.SteamId) == true;
+    }
+
+    // ========== CLEAR PLAYER DATA ==========
+    private bool showClearDataModal = false;
+    private bool isClearingData = false;
+    private string clearDataError = "";
+    private string clearDataSuccess = "";
+    private string clearDataPlayerSteamId = "";
+    private string clearDataPlayerName = "";
+    private bool clearChat, clearKills, clearDeaths, clearNotes, clearReports, clearBanHistory;
+    private bool AnyClearOptionSelected => clearChat || clearKills || clearDeaths || clearNotes || clearReports || clearBanHistory;
+
+    private void OpenClearDataModal(PlayerList_PlayerDTO player)
+    {
+        clearDataPlayerSteamId = player.SteamId;
+        clearDataPlayerName = player.Name;
+        clearChat = clearKills = clearDeaths = clearNotes = clearReports = clearBanHistory = false;
+        clearDataError = clearDataSuccess = "";
+        showClearDataModal = true;
+    }
+
+    private async Task ClearSelectedPlayerData()
+    {
+        if (!AnyClearOptionSelected) return;
+        await ExecuteClearPlayerData(deletePlayer: false);
+    }
+
+    private async Task DeletePlayerAndAllData()
+    {
+        await ExecuteClearPlayerData(deletePlayer: true);
+    }
+
+    private async Task ExecuteClearPlayerData(bool deletePlayer)
+    {
+        try
+        {
+            isClearingData = true;
+            clearDataError = clearDataSuccess = "";
+
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+
+            var request = new
+            {
+                ServerId = serverId,
+                ChatMessages = deletePlayer || clearChat,
+                Kills = deletePlayer || clearKills,
+                Deaths = deletePlayer || clearDeaths,
+                Notes = deletePlayer || clearNotes,
+                Reports = deletePlayer || clearReports,
+                BanHistory = deletePlayer || clearBanHistory,
+                All = deletePlayer,
+                DeletePlayer = deletePlayer
+            };
+
+            var response = await Http.PostAsJsonAsync($"/api/PlayerInspect/{clearDataPlayerSteamId}/clear-data", request);
+            if (response.IsSuccessStatusCode)
+            {
+                if (deletePlayer)
+                {
+                    showClearDataModal = false;
+                    await FetchPlayerData();
+                }
+                else
+                {
+                    clearDataSuccess = "Selected data cleared successfully.";
+                    clearChat = clearKills = clearDeaths = clearNotes = clearReports = clearBanHistory = false;
+                }
+            }
+            else
+            {
+                clearDataError = "Failed to clear data. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            clearDataError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isClearingData = false;
+        }
+    }
+
+    /// <summary>
+    /// Opens the kick dialog for a player
+    /// </summary>
+    private void OpenKickDialog(PlayerList_PlayerDTO player)
+    {
+        selectedPlayerForKick = player;
+        kickReason = "";
+        showKickModal = true;
+    }
+
+    /// <summary>
+    /// Closes the kick dialog and resets the form
+    /// </summary>
+    private void CloseKickDialog()
+    {
+        kickReason = "";
+        selectedPlayerForKick = null;
+        showKickModal = false;
+    }
+
+    /// <summary>
+    /// Confirms and executes the kick action with optional reason
+    /// </summary>
+    private async Task ConfirmKickPlayer()
+    {
+        if (selectedPlayerForKick == null)
+            return;
+
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+
+            var kickRequest = new
+            {
+                SteamId = selectedPlayerForKick.SteamId,
+                PlayerName = selectedPlayerForKick.Name,
+                Reason = kickReason,
+                ServerId = serverId
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/Dashboard/kick-player", kickRequest);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"Player '{selectedPlayerForKick.Name}' has been kicked");
+                CloseKickDialog();
+
+                await Task.Delay(500);
+                await FetchPlayerData();
+            }
+            else
+            {
+                Console.WriteLine($"Failed to kick player {selectedPlayerForKick.Name}");
+                CloseKickDialog();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error kicking player: {ex.Message}");
+            CloseKickDialog();
+        }
+    }
+
+    /// <summary>
+    /// Kicks a player from the server (legacy method)
+    /// </summary>
+    private async Task KickPlayer(PlayerList_PlayerDTO player)
+    {
+        await ExecutePlayerAction("kick", $"kick {player.SteamId}", player.SteamId);
+    }
+
+    /// <summary>
+    /// Kills a player on the server
+    /// </summary>
+    private async Task KillPlayer(PlayerList_PlayerDTO player)
+    {
+        await ExecutePlayerAction("kill", $"kill {player.SteamId}", player.Name);
+    }
+
+    /// <summary>
+    /// Executes a player action (kick, kill, etc.)
+    /// </summary>
+    private async Task ExecutePlayerAction(string actionName, string rconCommand, string playerName)
+    {
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+
+            Console.WriteLine($"[DEBUG] Executing action '{actionName}' with command: {rconCommand}");
+            Console.WriteLine($"[DEBUG] ServerId: {serverId}");
+
+            Console.WriteLine($"[DEBUG] Sending request to /api/Rcon/SendCustomCommand");
+
+            var response = await Http.PostAsJsonAsync("/api/Rcon/SendCustomCommand", new { Command = rconCommand });
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"Player action '{actionName}' executed successfully for {playerName}");
+                StateHasChanged();
+            }
+            else
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Failed to execute action '{actionName}' for player {playerName}. Status: {response.StatusCode}. Response: {content}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error executing player action '{actionName}': {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+        }
+    }
+
+    /// <summary>
+    /// Opens the notes dialog for a player
+    /// </summary>
+    private async void OpenNotesDialog(PlayerList_PlayerDTO player)
+    {
+        selectedPlayerForNotes = player;
+        playerNotes.Clear();
+        showNoteForm = false;
+        newNoteText = "";
+        editingNoteId = null;
+        showNotesModal = true;
+
+        await LoadPlayerNotes();
+    }
+
+    /// <summary>
+    /// Closes the notes dialog
+    /// </summary>
+    private void CloseNotesDialog()
+    {
+        selectedPlayerForNotes = null;
+        playerNotes.Clear();
+        showNoteForm = false;
+        newNoteText = "";
+        editingNoteId = null;
+        showNotesModal = false;
+    }
+
+    /// <summary>
+    /// Loads all notes for the selected player
+    /// </summary>
+    private async Task LoadPlayerNotes()
+    {
+        if (selectedPlayerForNotes == null) return;
+
+        isLoadingNotes = true;
+        StateHasChanged();
+
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+
+            var response = await Http.GetAsync($"/api/PlayerNotes/{selectedPlayerForNotes.SteamId}?serverId={serverId}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<PlayerNotesResponseDTO>();
+                if (result != null)
+                {
+                    playerNotes = result.Notes;
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Error loading notes: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading notes: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingNotes = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Saves a new or updated note
+    /// </summary>
+    private async Task SaveNote()
+    {
+        if (selectedPlayerForNotes == null || string.IsNullOrWhiteSpace(newNoteText)) return;
+
+        isSavingNote = true;
+        StateHasChanged();
+
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+
+            if (editingNoteId.HasValue)
+            {
+                var updateRequest = new UpdatePlayerNoteRequest
+                {
+                    NoteId = editingNoteId.Value,
+                    Note = newNoteText
+                };
+
+                var response = await Http.PutAsJsonAsync($"/api/PlayerNotes/{editingNoteId.Value}", updateRequest);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    await LoadPlayerNotes();
+                    showNoteForm = false;
+                    newNoteText = "";
+                    editingNoteId = null;
+                }
+            }
+            else
+            {
+                var createRequest = new CreatePlayerNoteRequest
+                {
+                    SteamId = selectedPlayerForNotes.SteamId,
+                    ServerId = serverId,
+                    Note = newNoteText
+                };
+
+                var response = await Http.PostAsJsonAsync("/api/PlayerNotes", createRequest);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    await LoadPlayerNotes();
+                    showNoteForm = false;
+                    newNoteText = "";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving note: {ex.Message}");
+        }
+        finally
+        {
+            isSavingNote = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Edits an existing note
+    /// </summary>
+    private void EditNote(PlayerNoteDTO note)
+    {
+        editingNoteId = note.Id;
+        newNoteText = note.Note;
+        showNoteForm = true;
+    }
+
+    /// <summary>
+    /// Cancels note editing
+    /// </summary>
+    private void CancelNoteEdit()
+    {
+        showNoteForm = false;
+        newNoteText = "";
+        editingNoteId = null;
+    }
+
+    /// <summary>
+    /// Deletes a note
+    /// </summary>
+    private async Task DeleteNote(int noteId)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Are you sure you want to delete this note?"))
+            return;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/PlayerNotes/{noteId}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadPlayerNotes();
+            }
+            else
+            {
+                Console.WriteLine($"Error deleting note: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting note: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Filters players based on search term
+    /// </summary>
+    private List<PlayerList_PlayerDTO> FilterPlayers(List<PlayerList_PlayerDTO> players)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return players;
+
+        var term = searchTerm.ToLower();
+        return players.Where(p =>
+            (p.Name ?? "").ToLower().Contains(term) ||
+            (p.SteamId ?? "").ToLower().Contains(term) ||
+            (p.Country ?? "").ToLower().Contains(term) ||
+            (p.LastIp ?? "").ToLower().Contains(term)
+        ).ToList();
+    }
+
+    /// <summary>
+    /// Sorts players based on current sort column and direction
+    /// </summary>
+    private List<PlayerList_PlayerDTO> SortPlayers(List<PlayerList_PlayerDTO> players)
+    {
+        var sorted = sortColumn switch
+        {
+            "Name" => players.OrderBy(p => p.Name ?? ""),
+            "SteamID" => players.OrderBy(p => p.SteamId ?? ""),
+            "Ping" => players.OrderBy(p => p.CurrentPing ?? int.MaxValue),
+            "Health" => players.OrderBy(p => p.Health ?? double.MinValue),
+            "Country" => players.OrderBy(p => p.Country ?? ""),
+            "SteamAge" => players.OrderBy(p => p.SteamAccountCreated ?? DateTime.MinValue),
+            "RustHours" => players.OrderBy(p => p.RustPlaytimeMinutes ?? int.MinValue),
+            "IP" => players.OrderBy(p => p.LastIp ?? ""),
+            "FirstSeen" => players.OrderBy(p => p.FirstSeen),
+            "LastSeen" => players.OrderBy(p => p.LastSeen),
+            _ => players.OrderBy(p => p.Name ?? "")
+        };
+
+        return sortAscending ? sorted.ToList() : sorted.Reverse().ToList();
+    }
+
+    /// <summary>
+    /// Handles column header click for sorting
+    /// </summary>
+    private void OnColumnHeaderClick(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+    }
+
+    /// <summary>
+    /// Gets sort icon markup for a column
+    /// </summary>
+    private MarkupString GetSortIcon(string column)
+    {
+        if (sortColumn != column)
+            return new MarkupString("");
+
+        return sortAscending
+            ? new MarkupString("<i class=\"fas fa-chevron-up text-[10px] text-orange-400\"></i>")
+            : new MarkupString("<i class=\"fas fa-chevron-down text-[10px] text-orange-400\"></i>");
+    }
+
+    /// <summary>
+    /// Calculates total ban duration in hours
+    /// </summary>
+    private long GetTotalBanHours()
+    {
+        long totalHours = banDurationHours;
+        totalHours += (long)banDurationDays * 24;
+        totalHours += (long)banDurationWeeks * 24 * 7;
+        totalHours += (long)banDurationMonths * 24 * 30;
+        totalHours += (long)banDurationYears * 24 * 365;
+        return totalHours;
+    }
+
+    /// <summary>
+    /// Opens the ban dialog for the selected player
+    /// </summary>
+    private void OpenBanDialog(PlayerList_PlayerDTO player)
+    {
+        selectedPlayerForBan = player;
+        ResetBanForm();
+        showBanModal = true;
+    }
+
+    /// <summary>
+    /// Closes the ban dialog and resets the form
+    /// </summary>
+    private void CloseBanDialog()
+    {
+        ResetBanForm();
+        selectedPlayerForBan = null;
+        showBanModal = false;
+    }
+
+    /// <summary>
+    /// Shows the confirmation dialog before executing the ban
+    /// </summary>
+    private void ConfirmBanPlayer()
+    {
+        if (selectedPlayerForBan == null || string.IsNullOrWhiteSpace(banReason))
+            return;
+
+        showBanModal = false;
+        showConfirmBanModal = true;
+    }
+
+    /// <summary>
+    /// Executes the ban action
+    /// </summary>
+    private async Task ExecuteBan()
+    {
+        if (selectedPlayerForBan == null)
+            return;
+
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+
+            var banData = new
+            {
+                SteamId = selectedPlayerForBan.SteamId,
+                PlayerName = selectedPlayerForBan.Name,
+                Reason = banReason,
+                DurationHours = GetTotalBanHours(),
+                IsGlobalBan = isGlobalBan,
+                ServerId = serverId,
+                InternalNote = string.IsNullOrWhiteSpace(banInternalNote) ? (string?)null : banInternalNote
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/dashboard/ban-player", banData);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"Player {selectedPlayerForBan.Name} has been banned");
+                await CancelBan();
+
+                await Task.Delay(1000);
+                await FetchPlayerData();
+            }
+            else
+            {
+                Console.WriteLine($"Failed to ban player {selectedPlayerForBan.Name}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error banning player: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Cancels the ban operation
+    /// </summary>
+    private async Task CancelBan()
+    {
+        ResetBanForm();
+        selectedPlayerForBan = null;
+        showConfirmBanModal = false;
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Resets the ban form to default values
+    /// </summary>
+    private void ResetBanForm()
+    {
+        banReason = "";
+        banInternalNote = "";
+        banDurationHours = 0;
+        banDurationDays = 0;
+        banDurationWeeks = 0;
+        banDurationMonths = 0;
+        banDurationYears = 0;
+        isGlobalBan = false;
+    }
+
+    /// <summary>
+    /// Checks if a player is banned
+    /// </summary>
+    private bool IsPlayerBanned(PlayerList_PlayerDTO player)
+    {
+        return player.IsBanned;
+    }
+
+    /// <summary>
+    /// Gets the CSS class for a player row
+    /// </summary>
+    private string GetPlayerRowClass(PlayerList_PlayerDTO player)
+    {
+        if (IsPlayerBanned(player))
+            return "bg-red-500/5";
+        return "";
+    }
+
+    /// <summary>
+    /// Opens the unban confirmation dialog
+    /// </summary>
+    private void OpenUnbanConfirmDialog(PlayerList_PlayerDTO player)
+    {
+        selectedPlayerForUnban = player;
+        showUnbanModal = true;
+    }
+
+    /// <summary>
+    /// Closes the unban confirmation dialog
+    /// </summary>
+    private void CloseUnbanConfirmDialog()
+    {
+        selectedPlayerForUnban = null;
+        showUnbanModal = false;
+    }
+
+    /// <summary>
+    /// Confirms and executes the unban action
+    /// </summary>
+    private async Task ConfirmUnbanPlayer()
+    {
+        if (selectedPlayerForUnban == null)
+            return;
+
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+
+            var unbanData = new
+            {
+                SteamId = selectedPlayerForUnban.SteamId,
+                PlayerName = selectedPlayerForUnban.Name,
+                ServerId = serverId
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/dashboard/unban-player", unbanData);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"Player {selectedPlayerForUnban.Name} has been unbanned");
+                CloseUnbanConfirmDialog();
+
+                await Task.Delay(1000);
+                await FetchPlayerData();
+            }
+            else
+            {
+                Console.WriteLine($"Failed to unban player {selectedPlayerForUnban.Name}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error unbanning player: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Give Item dialog reference
+    /// </summary>
+    private GiveItemDialog giveItemDialog = null!;
+
+    /// <summary>
+    /// Opens the give item dialog for a player
+    /// </summary>
+    private async Task OpenGiveItemDialog(PlayerList_PlayerDTO player)
+    {
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+            await giveItemDialog.Open(player.SteamId, player.Name, serverId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error opening give item dialog: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Callback when an item is given to refresh player list
+    /// </summary>
+    private async Task OnItemGiven()
+    {
+        Console.WriteLine("[GIVE ITEM] Item given, refreshing player list...");
+        await FetchPlayerData();
+    }
+
+    private string GetSteamAge(DateTime created)
+    {
+        var age = DateTime.UtcNow - created;
+        if (age.TotalDays >= 365)
+            return $"{(int)(age.TotalDays / 365)}y";
+        if (age.TotalDays >= 30)
+            return $"{(int)(age.TotalDays / 30)}mo";
+        return $"{(int)age.TotalDays}d";
+    }
+
+    private void NavigateToInspect(PlayerList_PlayerDTO player)
+    {
+        ClosePlayerActionsModal();
+        NavHelper.NavigateTo($"inspect/{player.SteamId}");
+    }
+
+    private void NavigateToPlayerReports(string steamId)
+    {
+        NavHelper.NavigateTo($"inspect/{steamId}?tab=reports");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _timer.Dispose();
+        _cts.Dispose();
+        _searchDebounceCts?.Cancel();
+        _searchDebounceCts?.Dispose();
+        await Task.CompletedTask;
+    }
+}

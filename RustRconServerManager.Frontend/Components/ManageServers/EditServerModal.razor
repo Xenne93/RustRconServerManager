@@ -1,0 +1,155 @@
+@using System.Net
+@using RustRconServerManager.Frontend.Components.UI
+@using RustRconServerManager.Shared.Configuration
+@using RustRconServerManager.Shared.Account
+@using RustRconServerManager.Shared.ManageServers
+@inject HttpClient Http
+
+<TwModal @bind-IsOpen="IsOpen" Title="Edit Server Connection" Size="lg">
+    <ChildContent>
+    <div class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Server Name</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="ServerName" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Server Address</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="ServerAddress" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">RCON Port</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="RconPort" type="number" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Server Password</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="Password" type="password" placeholder="Leave empty to keep current password" />
+            <p class="text-xs text-slate-500 mt-1">Only fill this if you want to change the password</p>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Modding Framework</label>
+            <select class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500" @bind="ModFramework">
+                <option value="None">None</option>
+                <option value="Oxide">Oxide</option>
+                <option value="Carbon">Carbon</option>
+            </select>
+            <p class="text-xs text-slate-500 mt-1">Select the modding framework running on this server</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" @bind="RustRconServerManagerModInstalled" class="sr-only peer" />
+                <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+            </label>
+            <span class="text-sm text-slate-300">RustRconServerManager Mod Installed</span>
+        </div>
+    </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex items-center justify-between w-full">
+            <div>
+                @if (IsSaving)
+                {
+                    <span class="text-sm text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>@SavingMessage</span>
+                }
+            </div>
+            <div class="flex gap-2">
+                <button class="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors" @onclick="Close" disabled="@IsSaving">Cancel</button>
+                <button class="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @onclick="Submit" disabled="@IsSaving">Save Changes</button>
+            </div>
+        </div>
+    </FooterContent>
+</TwModal>
+
+@code {
+
+    [Parameter] public EventCallback OnServerUpdated { get; set; }
+
+    private int ServerId;
+    private string ServerName = string.Empty;
+    private string Password = string.Empty;
+    private int RconPort;
+    private string ServerAddress = string.Empty;
+    private string ModFramework = "None";
+    private bool RustRconServerManagerModInstalled = false;
+    private bool IsSaving;
+    private string SavingMessage = string.Empty;
+
+    public bool IsOpen { get; private set; } = false;
+
+    public void Open(int serverId, string serverName, string serverAddress, int rconPort, string modFramework, bool RustRconServerManagerModInstalled)
+    {
+        ServerId = serverId;
+        ServerName = serverName;
+        ServerAddress = serverAddress;
+        RconPort = rconPort;
+        ModFramework = modFramework ?? "None";
+        RustRconServerManagerModInstalled = RustRconServerManagerModInstalled;
+        Password = string.Empty; // Don't populate password for security
+        IsOpen = true;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        IsOpen = false;
+        StateHasChanged();
+    }
+
+    private async Task Submit()
+    {
+        IsSaving = true;
+        SavingMessage = "Saving changes...";
+
+        var updateDto = new
+        {
+            ServerId = ServerId,
+            ServerName = ServerName,
+            ServerAddress = ServerAddress,
+            RconPort = RconPort,
+            Password = string.IsNullOrWhiteSpace(Password) ? null : Password,
+            ModFramework = ModFramework,
+            RustRconServerManagerModInstalled = RustRconServerManagerModInstalled
+        };
+
+        try
+        {
+            var result = await Http.PutAsJsonAsync("/api/Rcon/UpdateServer", updateDto);
+
+            if (result.StatusCode == HttpStatusCode.OK)
+            {
+                SavingMessage = "Server updated successfully!";
+                StateHasChanged();
+                await Task.Delay(1500);
+                await OnServerUpdated.InvokeAsync();
+                Close();
+            }
+            else if (result.StatusCode == HttpStatusCode.BadRequest)
+            {
+                SavingMessage = await result.Content.ReadAsStringAsync() ?? "Failed to update server.";
+                StateHasChanged();
+                await Task.Delay(2000);
+                ResetStates();
+            }
+            else
+            {
+                SavingMessage = "Failed to update server.";
+                StateHasChanged();
+                await Task.Delay(2000);
+                ResetStates();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating server: {ex.Message}");
+            SavingMessage = "Error communicating with backend.";
+            StateHasChanged();
+            await Task.Delay(2000);
+            ResetStates();
+        }
+    }
+
+    private void ResetStates()
+    {
+        IsSaving = false;
+        SavingMessage = string.Empty;
+    }
+}

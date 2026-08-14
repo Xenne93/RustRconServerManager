@@ -1,0 +1,38 @@
+@using System.Net.Http.Json
+@inject HttpClient Http
+
+<footer class="border-t border-slate-800/50 mt-6 py-4 px-4 lg:px-6">
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+        <span>
+            &copy; @DateTime.UtcNow.Year Xenne &mdash; Rust RCON Server Manager &mdash;
+            <a href="https://github.com/Xenne93/RustRconServerManager/" target="_blank" rel="noopener noreferrer"
+               class="text-slate-400 hover:text-orange-400 transition-colors">GitHub</a>
+        </span>
+        @if (!string.IsNullOrEmpty(version))
+        {
+            <span class="text-slate-600">@version</span>
+        }
+    </div>
+</footer>
+
+@code {
+    private string? version;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<VersionResponse>("/api/version");
+            version = response?.Version;
+        }
+        catch
+        {
+            version = null;
+        }
+    }
+
+    private class VersionResponse
+    {
+        public string? Version { get; set; }
+    }
+}

@@ -1,0 +1,110 @@
+@* Tailwind Input Component *@
+@typeparam TValue
+
+<div class="@(FullWidth ? "w-full" : "")">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="block text-sm font-medium text-slate-300 mb-1.5">
+            @Label
+            @if (Required)
+            {
+                <span class="text-red-400">*</span>
+            }
+        </label>
+    }
+    <div class="relative">
+        @if (LeadingIcon != null)
+        {
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                @LeadingIcon
+            </div>
+        }
+        <input
+            type="@Type"
+            class="@GetInputClasses()"
+            placeholder="@Placeholder"
+            value="@Value"
+            @onchange="HandleChange"
+            @oninput="HandleInput"
+            disabled="@Disabled"
+            readonly="@Readonly"
+            @attributes="AdditionalAttributes" />
+        @if (TrailingIcon != null)
+        {
+            <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                @TrailingIcon
+            </div>
+        }
+    </div>
+    @if (!string.IsNullOrEmpty(HelperText))
+    {
+        <p class="mt-1 text-xs text-slate-500">@HelperText</p>
+    }
+    @if (!string.IsNullOrEmpty(ErrorText))
+    {
+        <p class="mt-1 text-xs text-red-400">@ErrorText</p>
+    }
+</div>
+
+@code {
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> OnChange { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> OnInput { get; set; }
+    [Parameter] public string Type { get; set; } = "text";
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public string? ErrorText { get; set; }
+    [Parameter] public bool Disabled { get; set; } = false;
+    [Parameter] public bool Readonly { get; set; } = false;
+    [Parameter] public bool Required { get; set; } = false;
+    [Parameter] public bool FullWidth { get; set; } = true;
+    [Parameter] public RenderFragment? LeadingIcon { get; set; }
+    [Parameter] public RenderFragment? TrailingIcon { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task HandleChange(ChangeEventArgs e)
+    {
+        if (e.Value != null)
+        {
+            var value = (TValue)Convert.ChangeType(e.Value, typeof(TValue));
+            await ValueChanged.InvokeAsync(value);
+        }
+        await OnChange.InvokeAsync(e);
+    }
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        await OnInput.InvokeAsync(e);
+    }
+
+    private string GetInputClasses()
+    {
+        var baseClasses = "tw-input";
+        var stateClasses = "";
+
+        if (LeadingIcon != null)
+        {
+            stateClasses += " pl-10";
+        }
+
+        if (TrailingIcon != null)
+        {
+            stateClasses += " pr-10";
+        }
+
+        if (!string.IsNullOrEmpty(ErrorText))
+        {
+            stateClasses += " border-red-500 focus:ring-red-500/50 focus:border-red-500";
+        }
+
+        if (Disabled)
+        {
+            stateClasses += " opacity-50 cursor-not-allowed";
+        }
+
+        return $"{baseClasses}{stateClasses} {Class}".Trim();
+    }
+}

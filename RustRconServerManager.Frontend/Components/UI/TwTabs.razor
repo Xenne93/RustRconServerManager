@@ -1,0 +1,72 @@
+@* Tailwind Tabs Component *@
+
+<div class="@Class">
+    @* Tab List *@
+    <div class="flex border-b border-slate-700">
+        @foreach (var tab in Tabs)
+        {
+            <button
+                type="button"
+                class="@GetTabClass(tab.Key)"
+                @onclick="() => SelectTab(tab.Key)">
+                @if (tab.Icon != null)
+                {
+                    <span class="mr-2">@tab.Icon</span>
+                }
+                @tab.Label
+                @if (tab.Badge != null)
+                {
+                    <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-slate-700 text-slate-300">@tab.Badge</span>
+                }
+            </button>
+        }
+    </div>
+
+    @* Tab Content *@
+    <div class="pt-4">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public List<TabItem> Tabs { get; set; } = new();
+    [Parameter] public string ActiveTab { get; set; } = "";
+    [Parameter] public EventCallback<string> ActiveTabChanged { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrEmpty(ActiveTab) && Tabs.Count > 0)
+        {
+            ActiveTab = Tabs[0].Key;
+        }
+    }
+
+    private async Task SelectTab(string tabKey)
+    {
+        ActiveTab = tabKey;
+        await ActiveTabChanged.InvokeAsync(tabKey);
+    }
+
+    private string GetTabClass(string tabKey)
+    {
+        var baseClasses = "flex items-center px-4 py-3 text-sm font-medium transition-colors -mb-px";
+        var isActive = ActiveTab == tabKey;
+
+        if (isActive)
+        {
+            return $"{baseClasses} text-orange-400 border-b-2 border-orange-400";
+        }
+
+        return $"{baseClasses} text-slate-400 hover:text-white border-b-2 border-transparent";
+    }
+
+    public class TabItem
+    {
+        public string Key { get; set; } = "";
+        public string Label { get; set; } = "";
+        public RenderFragment? Icon { get; set; }
+        public string? Badge { get; set; }
+    }
+}

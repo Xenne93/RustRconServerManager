@@ -1,0 +1,35 @@
+@inherits LayoutComponentBase
+@using RustRconServerManager.Frontend.Components.Layout.Navigation
+@using RustRconServerManager.Frontend.Components
+@using RustRconServerManager.Frontend.Components.Footer
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager NavigationManager
+
+<div class="min-h-screen bg-[#0f0f17] flex flex-col">
+    @* Top Navbar *@
+    <TopNavbar OnMobileMenuToggle="ToggleMobileSidebar" />
+
+    @* Sidebar - Desktop *@
+    <SidebarNav />
+
+    @* Mobile Sidebar *@
+    <MobileSidebar @bind-IsOpen="MobileSidebarOpen" />
+
+    @* Main Content *@
+    <main class="pt-16 lg:pl-64 flex-1 flex flex-col">
+        <ServerOfflineBanner />
+        <div class="p-4 lg:p-6 overflow-x-hidden flex-1">
+            @Body
+        </div>
+        <Footer />
+    </main>
+</div>
+
+@code {
+    private bool MobileSidebarOpen = false;
+
+    private void ToggleMobileSidebar()
+    {
+        MobileSidebarOpen = !MobileSidebarOpen;
+    }
+}

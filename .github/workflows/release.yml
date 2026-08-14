@@ -1,0 +1,203 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should-release: ${{ steps.check.outputs.should-release }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for [CICD=RELEASE] tag or manual trigger
+        id: check
+        run: |
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          IS_MANUAL=${{ github.event_name == 'workflow_dispatch' }}
+
+          if [[ "$COMMIT_MESSAGE" == *"[CICD=RELEASE]"* ]] || [[ "$IS_MANUAL" == "true" ]]; then
+            echo "should-release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate version
+        id: version
+        if: steps.check.outputs.should-release == 'true'
+        run: |
+          VERSION=$(date +'%Y.%m.%d')
+          PATCH=$(git rev-list --count HEAD)
+          FULL_VERSION="${VERSION}.${PATCH}"
+          echo "version=${FULL_VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${FULL_VERSION}"
+
+  build-linux:
+    needs: check-release
+    if: needs.check-release.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      MARIADB_VERSION: 11.4.12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build Release
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish Linux Release
+        run: dotnet publish RustRconServerManager.Backend/RustRconServerManager.Backend.csproj -c Release -o ./publish/linux/app --self-contained -r linux-x64
+
+      - name: Download and bundle MariaDB
+        run: |
+          curl -fSL "https://archive.mariadb.org/mariadb-11.4/bintar-linux-systemd-x86_64/mariadb-${MARIADB_VERSION}-linux-systemd-x86_64.tar.gz" -o /tmp/mariadb.tar.gz
+          mkdir -p ./publish/linux/mariadb
+          tar -xzf /tmp/mariadb.tar.gz --strip-components=1 -C ./publish/linux/mariadb
+          test -x ./publish/linux/mariadb/bin/mariadbd
+          test -x ./publish/linux/mariadb/scripts/mariadb-install-db
+
+      - name: Add standalone launcher
+        run: |
+          cp standalone/start.sh ./publish/linux/start.sh
+          cp standalone/README.md ./publish/linux/README.md
+          chmod +x ./publish/linux/start.sh
+          chmod +x ./publish/linux/app/RustRconServerManager.Backend
+          echo "v${{ needs.check-release.outputs.version }}" > ./publish/linux/app/.version
+
+      - name: Create Linux TAR.GZ
+        run: |
+          cd publish/linux
+          tar -czf ../RustRconServerManager-Linux-x64-v${{ needs.check-release.outputs.version }}.tar.gz *
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: publish/RustRconServerManager-Linux-x64-v${{ needs.check-release.outputs.version }}.tar.gz
+
+  build-windows:
+    needs: check-release
+    if: needs.check-release.outputs.should-release == 'true'
+    runs-on: windows-latest
+    env:
+      MARIADB_VERSION: 11.4.12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore RustRconServerManager.Backend/RustRconServerManager.Backend.csproj
+
+      - name: Build Release
+        run: dotnet build RustRconServerManager.Backend/RustRconServerManager.Backend.csproj --configuration Release --no-restore
+
+      - name: Publish Windows Release
+        run: dotnet publish RustRconServerManager.Backend/RustRconServerManager.Backend.csproj -c Release -o ./publish/windows/app --self-contained -r win-x64
+
+      - name: Download and bundle MariaDB
+        run: |
+          Invoke-WebRequest -Uri "https://archive.mariadb.org/mariadb-11.4/winx64-packages/mariadb-$env:MARIADB_VERSION-winx64.zip" -OutFile mariadb.zip
+          Expand-Archive -Path mariadb.zip -DestinationPath ./publish/windows
+          Rename-Item -Path "./publish/windows/mariadb-$env:MARIADB_VERSION-winx64" -NewName "mariadb"
+          if (-not (Test-Path "./publish/windows/mariadb/bin/mariadbd.exe")) { throw "mariadbd.exe not found where expected - MariaDB package layout may have changed." }
+          if (-not (Test-Path "./publish/windows/mariadb/bin/mariadb-install-db.exe")) { throw "mariadb-install-db.exe not found where expected - MariaDB package layout may have changed." }
+
+      - name: Add standalone launcher
+        run: |
+          Copy-Item standalone/start.bat ./publish/windows/start.bat
+          Copy-Item standalone/start.ps1 ./publish/windows/start.ps1
+          Copy-Item standalone/README.md ./publish/windows/README.md
+          Set-Content -Path ./publish/windows/app/.version -Value "v${{ needs.check-release.outputs.version }}" -NoNewline
+
+      - name: Create Windows ZIP
+        run: Compress-Archive -Path ./publish/windows/* -DestinationPath ./RustRconServerManager-Windows-x64-v${{ needs.check-release.outputs.version }}.zip
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: RustRconServerManager-Windows-x64-v${{ needs.check-release.outputs.version }}.zip
+
+  create-release:
+    needs: [check-release, build-linux, build-windows]
+    if: needs.check-release.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./releases
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.check-release.outputs.version }}
+          name: Release v${{ needs.check-release.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            ## RustRconServerManager v${{ needs.check-release.outputs.version }}
+
+            ### Download Native Release
+
+            Both native releases below are fully standalone: they bundle their own
+            MariaDB database (listening only on 127.0.0.1:3307, isolated from any other
+            MariaDB/MySQL you may already have running) so no separate database server
+            or Docker is required. No .NET runtime required either - both are
+            self-contained.
+
+            **Linux (x64)**
+            - `RustRconServerManager-Linux-x64-v${{ needs.check-release.outputs.version }}.tar.gz`
+            - Extract, then run `./start.sh`
+
+            **Windows (x64)**
+            - `RustRconServerManager-Windows-x64-v${{ needs.check-release.outputs.version }}.zip`
+            - Extract, then double-click `start.bat`
+
+            The first run generates random database/JWT/RCON credentials and initializes
+            the bundled database - see the included `README.md` for details, including how
+            to point it at your own database server instead if you'd rather do that.
+
+            ### Docker
+
+            Alternatively, use Docker:
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:v${{ needs.check-release.outputs.version }}
+            ```
+
+            Or with docker compose (set IMAGE_TAG in your .env, or inline):
+            ```bash
+            IMAGE_TAG=v${{ needs.check-release.outputs.version }} docker compose up -d
+            ```
+
+            ### Changes
+            See commit history for details
+          files: |
+            releases/linux-release/*.tar.gz
+            releases/windows-release/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

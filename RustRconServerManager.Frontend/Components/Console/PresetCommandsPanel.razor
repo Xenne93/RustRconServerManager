@@ -1,0 +1,534 @@
+@using System.Text.Json
+@using System.Text.RegularExpressions
+@using Blazored.LocalStorage
+@using RustRconServerManager.Shared.PresetCommand
+@using RustRconServerManager.Shared.PlayerList
+@using RustRconServerManager.Frontend.Services
+@inject ILocalStorageService LocalStorage
+@inject HttpClient Http
+@inject NavigationHelper NavHelper
+
+<TwCard HeaderTitle="Preset Commands" HeaderIcon="fas fa-bolt">
+    <HeaderActions>
+        <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-white" title="Manage Presets" @onclick="OpenManageModal">
+            <i class="fas fa-cog text-xs"></i>
+        </button>
+    </HeaderActions>
+    <ChildContent>
+        @if (isLoading)
+        {
+            <div class="flex items-center justify-center py-4">
+                <span class="tw-spinner mr-2" style="width: 16px; height: 16px;"></span>
+                <span class="text-slate-400 text-sm">Loading presets...</span>
+            </div>
+        }
+        else if (presets.Count == 0)
+        {
+            <div class="text-center py-4 text-slate-500 text-sm">
+                <i class="fas fa-bolt text-lg mb-2 block"></i>
+                <p>No preset commands configured.</p>
+                <button class="tw-btn-outline tw-btn-sm mt-2" @onclick="OpenManageModal">
+                    <i class="fas fa-plus mr-1"></i>Add Preset
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="flex flex-wrap gap-2">
+                @foreach (var preset in presets)
+                {
+                    <button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border border-slate-600/50 bg-slate-800/50 text-slate-300 hover:bg-orange-500/20 hover:border-orange-500/50 hover:text-orange-300 transition-all duration-200"
+                            title="@(!string.IsNullOrEmpty(preset.Description) ? preset.Description : preset.Command)"
+                            @onclick="() => HandlePresetClick(preset)">
+                        @if (preset.IsGlobal)
+                        {
+                            <i class="fas fa-globe text-[10px] text-blue-400"></i>
+                        }
+                        @preset.Name
+                    </button>
+                }
+            </div>
+        }
+    </ChildContent>
+</TwCard>
+
+@* Placeholder Popup Modal *@
+<TwModal @bind-IsOpen="showPlaceholderModal" Title="Configure Command" Size="default">
+    <ChildContent>
+        <div class="space-y-4">
+            <div class="p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                <p class="text-xs text-slate-400 mb-1">Command Template</p>
+                <code class="text-sm text-orange-300 font-mono">@executingPreset?.Command</code>
+            </div>
+
+            @if (needsPlayer)
+            {
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Player</label>
+                    <div class="flex items-center gap-2 mb-2">
+                        <select class="tw-input text-sm"
+                                @bind="selectedPlayerName">
+                            <option value="">Select a player...</option>
+                            @foreach (var player in GetFilteredPlayers())
+                            {
+                                <option value="@player.Name">@player.Name @(player.IsOnline ? "" : "(Offline)")</option>
+                            }
+                        </select>
+                    </div>
+                    <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                        <input type="checkbox" class="rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500/50" @bind="showOfflinePlayers" />
+                        Include offline players
+                    </label>
+                </div>
+            }
+
+            @if (needsAmount)
+            {
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Amount</label>
+                    <input type="number" class="tw-input text-sm" placeholder="Enter amount..."
+                           @bind="amountValue" />
+                </div>
+            }
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <button class="tw-btn-secondary" @onclick="ClosePlaceholderModal">Cancel</button>
+        <button class="tw-btn-primary" @onclick="ExecuteWithPlaceholders" disabled="@(!CanExecute())">
+            <i class="fas fa-play mr-1"></i>Execute
+        </button>
+    </FooterContent>
+</TwModal>
+
+@* Manage Presets Modal *@
+<TwModal @bind-IsOpen="showManageModal" Title="Manage Preset Commands" Size="lg" MaxHeight="70vh">
+    <ChildContent>
+        @if (!showAddEditForm)
+        {
+            <div class="mb-4">
+                <button class="tw-btn-primary tw-btn-sm" @onclick="StartAddPreset">
+                    <i class="fas fa-plus mr-1"></i>Add Preset
+                </button>
+            </div>
+
+            @if (presets.Count == 0)
+            {
+                <div class="text-center py-8 text-slate-500">
+                    <i class="fas fa-bolt text-2xl mb-2 block"></i>
+                    <p>No preset commands yet. Click "Add Preset" to create one.</p>
+                </div>
+            }
+            else
+            {
+                <div class="overflow-x-auto">
+                    <table class="tw-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Command</th>
+                                <th>Scope</th>
+                                <th class="text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var preset in presets)
+                            {
+                                <tr>
+                                    <td class="font-medium text-white">@preset.Name</td>
+                                    <td>
+                                        <code class="text-xs text-orange-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded">@preset.Command</code>
+                                    </td>
+                                    <td>
+                                        @if (preset.IsGlobal)
+                                        {
+                                            <TwBadge Variant="info">Global</TwBadge>
+                                        }
+                                        else
+                                        {
+                                            <TwBadge Variant="default">Server</TwBadge>
+                                        }
+                                    </td>
+                                    <td class="text-right">
+                                        <div class="flex items-center justify-end gap-1">
+                                            <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-white" title="Edit" @onclick="() => StartEditPreset(preset)">
+                                                <i class="fas fa-pen text-xs"></i>
+                                            </button>
+                                            <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-red-400" title="Delete" @onclick="() => ConfirmDeletePreset(preset)">
+                                                <i class="fas fa-trash text-xs"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+        else
+        {
+            @* Add/Edit Form *@
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Name</label>
+                    <input type="text" class="tw-input text-sm" placeholder="e.g. Kick Player"
+                           @bind="editForm.Name" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Command</label>
+                    <input type="text" class="tw-input text-sm font-mono" placeholder='e.g. kick {player} "AFK"'
+                           @bind="editForm.Command" />
+                    <p class="text-xs text-slate-500 mt-1">
+                        Use <code class="text-orange-400">@("{player}")</code> for player selector and <code class="text-orange-400">@("{amount}")</code> for number input.
+                    </p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Description (optional)</label>
+                    <input type="text" class="tw-input text-sm" placeholder="Brief description of what this command does"
+                           @bind="editForm.Description" />
+                </div>
+                <div>
+                    <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                        <input type="checkbox" class="rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500/50"
+                               @bind="editForm.IsGlobal" />
+                        Global (available on all servers)
+                    </label>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Sort Order</label>
+                    <input type="number" class="tw-input text-sm w-24" @bind="editForm.SortOrder" />
+                </div>
+            </div>
+        }
+
+        @* Delete Confirmation *@
+        @if (showDeleteConfirm)
+        {
+            <div class="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                <p class="text-sm text-red-300">
+                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                    Are you sure you want to delete "<strong>@deletingPreset?.Name</strong>"?
+                </p>
+                <div class="flex gap-2 mt-2">
+                    <button class="tw-btn-sm bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/30" @onclick="DeletePreset">
+                        <i class="fas fa-trash mr-1"></i>Delete
+                    </button>
+                    <button class="tw-btn-secondary tw-btn-sm" @onclick="CancelDelete">Cancel</button>
+                </div>
+            </div>
+        }
+    </ChildContent>
+    <FooterContent>
+        @if (showAddEditForm)
+        {
+            <button class="tw-btn-secondary" @onclick="CancelAddEdit">Back</button>
+            <button class="tw-btn-primary" @onclick="SavePreset" disabled="@isSaving">
+                @if (isSaving)
+                {
+                    <span class="tw-spinner mr-1" style="width: 14px; height: 14px;"></span>
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <i class="fas fa-save mr-1"></i>
+                    <span>@(isEditing ? "Update" : "Create")</span>
+                }
+            </button>
+        }
+        else
+        {
+            <button class="tw-btn-secondary" @onclick="CloseManageModal">Close</button>
+        }
+    </FooterContent>
+</TwModal>
+
+@code {
+    [Parameter] public EventCallback<string> OnExecuteCommand { get; set; }
+
+    private List<PresetCommandDto> presets = new();
+    private bool isLoading = true;
+    private int serverId;
+
+    // Placeholder modal state
+    private bool showPlaceholderModal;
+    private PresetCommandDto? executingPreset;
+    private bool needsPlayer;
+    private bool needsAmount;
+    private string selectedPlayerName = string.Empty;
+    private int? amountValue;
+    private bool showOfflinePlayers;
+    private PlayerList_PlayerListDTO? playerData;
+    private bool isLoadingPlayers;
+
+    // Manage modal state
+    private bool showManageModal;
+    private bool showAddEditForm;
+    private bool isEditing;
+    private int? editingPresetId;
+    private EditFormModel editForm = new();
+    private bool isSaving;
+
+    // Delete confirmation
+    private bool showDeleteConfirm;
+    private PresetCommandDto? deletingPreset;
+
+    protected override async Task OnInitializedAsync()
+    {
+        serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+        await LoadPresets();
+    }
+
+    private async Task LoadPresets()
+    {
+        if (serverId == 0) { isLoading = false; return; }
+
+        try
+        {
+            isLoading = true;
+
+            var response = await Http.GetAsync($"/api/PresetCommands/server/{serverId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                presets = JsonSerializer.Deserialize<List<PresetCommandDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading presets: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandlePresetClick(PresetCommandDto preset)
+    {
+        var command = preset.Command;
+        var hasPlayer = command.Contains("{player}", StringComparison.OrdinalIgnoreCase);
+        var hasAmount = command.Contains("{amount}", StringComparison.OrdinalIgnoreCase);
+
+        if (!hasPlayer && !hasAmount)
+        {
+            // Execute immediately
+            await OnExecuteCommand.InvokeAsync(command);
+            return;
+        }
+
+        // Show placeholder popup
+        executingPreset = preset;
+        needsPlayer = hasPlayer;
+        needsAmount = hasAmount;
+        selectedPlayerName = string.Empty;
+        amountValue = null;
+        showOfflinePlayers = false;
+
+        if (hasPlayer)
+        {
+            await LoadPlayers();
+        }
+
+        showPlaceholderModal = true;
+    }
+
+    private async Task LoadPlayers()
+    {
+        if (serverId == 0 || playerData != null) return;
+
+        try
+        {
+            isLoadingPlayers = true;
+
+            var response = await Http.GetAsync($"/api/Dashboard/GetPlayerList/{serverId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                playerData = JsonSerializer.Deserialize<PlayerList_PlayerListDTO>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading players: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingPlayers = false;
+        }
+    }
+
+    private List<PlayerList_PlayerDTO> GetFilteredPlayers()
+    {
+        if (playerData == null) return new();
+
+        var players = new List<PlayerList_PlayerDTO>(playerData.OnlinePlayers);
+        if (showOfflinePlayers)
+        {
+            players.AddRange(playerData.OfflinePlayers);
+        }
+        return players.OrderBy(p => p.Name).ToList();
+    }
+
+    private bool CanExecute()
+    {
+        if (needsPlayer && string.IsNullOrWhiteSpace(selectedPlayerName)) return false;
+        if (needsAmount && !amountValue.HasValue) return false;
+        return true;
+    }
+
+    private async Task ExecuteWithPlaceholders()
+    {
+        if (executingPreset == null || !CanExecute()) return;
+
+        var command = executingPreset.Command;
+
+        if (needsPlayer)
+        {
+            command = Regex.Replace(command, @"\{""?\{?player\}?""?\}", selectedPlayerName, RegexOptions.IgnoreCase);
+        }
+
+        if (needsAmount && amountValue.HasValue)
+        {
+            command = Regex.Replace(command, @"\{""?\{?amount\}?""?\}", amountValue.Value.ToString(), RegexOptions.IgnoreCase);
+        }
+
+        showPlaceholderModal = false;
+        await OnExecuteCommand.InvokeAsync(command);
+    }
+
+    private void ClosePlaceholderModal()
+    {
+        showPlaceholderModal = false;
+        executingPreset = null;
+    }
+
+    // Manage modal methods
+    private void OpenManageModal()
+    {
+        showManageModal = true;
+        showAddEditForm = false;
+        showDeleteConfirm = false;
+    }
+
+    private void CloseManageModal()
+    {
+        showManageModal = false;
+        showAddEditForm = false;
+        showDeleteConfirm = false;
+    }
+
+    private void StartAddPreset()
+    {
+        isEditing = false;
+        editingPresetId = null;
+        editForm = new EditFormModel();
+        showAddEditForm = true;
+        showDeleteConfirm = false;
+    }
+
+    private void StartEditPreset(PresetCommandDto preset)
+    {
+        isEditing = true;
+        editingPresetId = preset.Id;
+        editForm = new EditFormModel
+        {
+            Name = preset.Name,
+            Command = preset.Command,
+            Description = preset.Description ?? string.Empty,
+            IsGlobal = preset.IsGlobal,
+            SortOrder = preset.SortOrder
+        };
+        showAddEditForm = true;
+        showDeleteConfirm = false;
+    }
+
+    private void CancelAddEdit()
+    {
+        showAddEditForm = false;
+    }
+
+    private async Task SavePreset()
+    {
+        if (string.IsNullOrWhiteSpace(editForm.Name) || string.IsNullOrWhiteSpace(editForm.Command)) return;
+
+        try
+        {
+            isSaving = true;
+
+            var dto = new CreatePresetCommandDto
+            {
+                RconServerId = serverId,
+                Name = editForm.Name,
+                Command = editForm.Command,
+                Description = string.IsNullOrWhiteSpace(editForm.Description) ? null : editForm.Description,
+                IsGlobal = editForm.IsGlobal,
+                SortOrder = editForm.SortOrder
+            };
+
+            System.Net.Http.HttpResponseMessage response;
+            if (isEditing && editingPresetId.HasValue)
+            {
+                response = await Http.PutAsJsonAsync($"/api/PresetCommands/{editingPresetId.Value}", dto);
+            }
+            else
+            {
+                response = await Http.PostAsJsonAsync("/api/PresetCommands", dto);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                showAddEditForm = false;
+                await LoadPresets();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving preset: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmDeletePreset(PresetCommandDto preset)
+    {
+        deletingPreset = preset;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirm = false;
+        deletingPreset = null;
+    }
+
+    private async Task DeletePreset()
+    {
+        if (deletingPreset == null) return;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/PresetCommands/{deletingPreset.Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                showDeleteConfirm = false;
+                deletingPreset = null;
+                await LoadPresets();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting preset: {ex.Message}");
+        }
+    }
+
+    private class EditFormModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Command { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool IsGlobal { get; set; }
+        public int SortOrder { get; set; }
+    }
+}

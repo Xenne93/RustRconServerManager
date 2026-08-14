@@ -1,0 +1,28 @@
+@using RustRconServerManager.Shared.Scheduler
+
+<div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4">
+    <h6 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Hourly Execution Settings</h6>
+    <div>
+        <label class="block text-sm font-medium text-slate-300 mb-1">Interval (hours)</label>
+        <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+               min="1" max="24" @onchange="OnIntervalChange" value="@(IntervalHours ?? 1)" />
+        <p class="text-xs text-slate-500 mt-1">Execute every X hours (1, 2, 6, 12, 24, etc.)</p>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int? IntervalHours { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> OnIntervalHoursChange { get; set; }
+
+    private async Task OnIntervalChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString() ?? "", out var value) && value > 0)
+        {
+            IntervalHours = value;
+            await OnIntervalHoursChange.InvokeAsync(value);
+        }
+    }
+}

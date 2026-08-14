@@ -1,0 +1,10 @@
+@using RustRconServerManager.Frontend.Services
+@inject NavigationHelper NavHelper
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Don't use forceLoad to avoid unnecessary full page reloads
+        NavHelper.NavigateTo("login", forceLoad: false);
+    }
+}

@@ -1,0 +1,20 @@
+@using RustRconServerManager.Frontend.Components.UI
+
+<TwStatCard Title="Online Players"
+            Value="@(OnlinePlayers?.ToString() ?? "--")"
+            Subtitle="connected now"
+            Variant="primary">
+    <Icon>
+        <i class="fas fa-users"></i>
+    </Icon>
+</TwStatCard>
+
+@code {
+    [Parameter] public int? OnlinePlayers { get; set; }
+
+    public async Task Update(int? onlineplayers)
+    {
+        OnlinePlayers = onlineplayers;
+        StateHasChanged();
+    }
+}

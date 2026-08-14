@@ -1,0 +1,15 @@
+<div class="card mb-4 card-shadow">
+    <div class="card-header py-3">
+        <h6 class="fw-bold m-0 cardheader-text">@if (!string.IsNullOrEmpty(IconClass)) { <i class="@IconClass"></i> }&nbsp;@CardTitle</h6>
+    </div>
+    <div class="card-body">
+        @ChildContent
+    </div>
+</div>
+
+
+@code {
+    [Parameter] public string CardTitle { get; set; }
+    [Parameter] public RenderFragment ChildContent { get; set; }
+    [Parameter] public string? IconClass { get; set; } // Example fa-solid fa-circle-info
+}

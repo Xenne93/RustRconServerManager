@@ -1,0 +1,70 @@
+@* Tailwind Card Component *@
+
+<div class="@GetCardClasses()">
+    @if (!string.IsNullOrEmpty(HeaderTitle) || HeaderContent != null)
+    {
+        <div class="tw-card-header">
+            @if (HeaderContent != null)
+            {
+                @HeaderContent
+            }
+            else
+            {
+                <div class="flex items-center gap-2">
+                    @if (!string.IsNullOrEmpty(HeaderIcon))
+                    {
+                        <i class="@HeaderIcon text-orange-400"></i>
+                    }
+                    <span class="text-sm font-semibold text-white">@HeaderTitle</span>
+                    @if (!string.IsNullOrEmpty(HeaderBadge))
+                    {
+                        <span class="px-2 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-400">@HeaderBadge</span>
+                    }
+                </div>
+                @if (HeaderActions != null)
+                {
+                    <div class="flex items-center gap-1">
+                        @HeaderActions
+                    </div>
+                }
+            }
+        </div>
+    }
+    <div class="@(NoPadding ? "" : "tw-card-body")">
+        @ChildContent
+    </div>
+    @if (FooterContent != null)
+    {
+        <div class="px-4 py-3 border-t border-slate-700/50 bg-slate-800/20">
+            @FooterContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+    [Parameter] public string? HeaderIcon { get; set; }
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+    [Parameter] public RenderFragment? FooterContent { get; set; }
+    [Parameter] public string? HeaderTitle { get; set; }
+    [Parameter] public string? HeaderBadge { get; set; }
+    [Parameter] public string Variant { get; set; } = "default";
+    [Parameter] public bool NoPadding { get; set; } = false;
+    [Parameter] public string? Class { get; set; }
+
+    private string GetCardClasses()
+    {
+        var baseClasses = "tw-card";
+        var variantClasses = Variant switch
+        {
+            "success" => "border-emerald-500/30",
+            "warning" => "border-amber-500/30",
+            "danger" => "border-red-500/30",
+            "primary" => "border-orange-500/30",
+            _ => ""
+        };
+
+        return $"{baseClasses} {variantClasses} {Class}".Trim();
+    }
+}

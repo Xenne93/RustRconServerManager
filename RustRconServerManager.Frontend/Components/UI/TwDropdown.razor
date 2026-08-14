@@ -1,0 +1,76 @@
+@* Tailwind Dropdown Component - Pure Blazor/CSS (no Bootstrap JS) *@
+
+<div class="relative" @onfocusout="HandleFocusOut">
+    @* Trigger *@
+    <div @onclick="Toggle" @onclick:stopPropagation="true">
+        @if (TriggerContent != null)
+        {
+            @TriggerContent
+        }
+        else
+        {
+            <button type="button" class="tw-btn-outline">
+                @TriggerText
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+            </button>
+        }
+    </div>
+
+    @* Dropdown content *@
+    @if (IsOpen)
+    {
+        <div class="tw-dropdown-content @GetAlignmentClass()" @onclick:stopPropagation="true">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? TriggerContent { get; set; }
+    [Parameter] public string TriggerText { get; set; } = "Select";
+    [Parameter] public string Align { get; set; } = "left";
+    [Parameter] public bool CloseOnSelect { get; set; } = true;
+
+    private bool IsOpen { get; set; } = false;
+
+    public void Toggle()
+    {
+        IsOpen = !IsOpen;
+    }
+
+    public void Open()
+    {
+        IsOpen = true;
+    }
+
+    public void Close()
+    {
+        IsOpen = false;
+    }
+
+    private void HandleFocusOut()
+    {
+        // Delay to allow click events to process
+        _ = Task.Delay(150).ContinueWith(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                IsOpen = false;
+                StateHasChanged();
+            });
+        });
+    }
+
+    private string GetAlignmentClass()
+    {
+        return Align switch
+        {
+            "right" => "right-0",
+            "center" => "left-1/2 -translate-x-1/2",
+            _ => "left-0"
+        };
+    }
+}

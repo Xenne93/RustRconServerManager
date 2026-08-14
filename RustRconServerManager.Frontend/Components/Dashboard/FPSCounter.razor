@@ -1,0 +1,31 @@
+@using RustRconServerManager.Frontend.Components.UI
+
+<TwStatCard Title="Server FPS"
+            Value="@(Fps ?? "--")"
+            Subtitle="frames per second"
+            Variant="@GetVariant()">
+    <Icon>
+        <i class="fas fa-signal"></i>
+    </Icon>
+</TwStatCard>
+
+@code {
+    [Parameter] public string? Fps { get; set; }
+
+    public async Task Update(string fps)
+    {
+        Fps = fps;
+        StateHasChanged();
+    }
+
+    private string GetVariant()
+    {
+        if (int.TryParse(Fps, out var fpsValue))
+        {
+            if (fpsValue >= 50) return "success";
+            if (fpsValue >= 30) return "warning";
+            return "danger";
+        }
+        return "default";
+    }
+}

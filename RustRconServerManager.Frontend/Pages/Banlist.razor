@@ -1,0 +1,621 @@
+@page "/banlist"
+@using System.Net.Http.Headers
+@using Microsoft.AspNetCore.Authorization
+@using Blazored.LocalStorage
+@using RustRconServerManager.Shared.PlayerList
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Frontend.Components.Auth
+@using RustRconServerManager.Frontend.Components.Card
+@using RustRconServerManager.Frontend.Utilities
+@using RustRconServerManager.Frontend.Services
+@inject HttpClient Http
+@inject ILocalStorageService LocalStorage
+@inject IJSRuntime JS
+@inject ServerValidationHelper ServerValidationHelper
+@implements IAsyncDisposable
+
+@attribute [Authorize]
+<PageAccessGuard PageRoute="banlist">
+<ContentWrapper>
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+        <h3 class="text-xl font-semibold text-white">Server Bans & Reports</h3>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="mb-6">
+        <input type="text"
+               class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+               placeholder="Search bans and reports by Steam ID, username, or notes..."
+               @bind="searchTerm" @bind:event="oninput" />
+    </div>
+
+    @if (banListData == null)
+    {
+        <div class="rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 text-sm">Loading ban list...</div>
+    }
+    else if (banListData.Count == 0)
+    {
+        <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 text-sm">No bans found for this server</div>
+    }
+    else
+    {
+        <TwCard Variant="danger" HeaderTitle="@($"Active Bans ({FilterActiveBans(banListData).Count})")" HeaderIcon="fas fa-ban">
+            <div class="overflow-x-auto">
+                <table class="tw-table">
+                    <thead>
+                        <tr>
+                            <th class="cursor-pointer hover:text-orange-400 transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.SteamID)">
+                                Steam ID <span>@GetSortIndicator(ColumnHeaders.SteamID)</span>
+                            </th>
+                            <th class="cursor-pointer hover:text-orange-400 transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Username)">
+                                Username <span>@GetSortIndicator(ColumnHeaders.Username)</span>
+                            </th>
+                            <th class="cursor-pointer hover:text-orange-400 transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Notes)">
+                                Reason <span>@GetSortIndicator(ColumnHeaders.Notes)</span>
+                            </th>
+                            <th class="text-center">Note</th>
+                            <th>Server</th>
+                            <th class="cursor-pointer hover:text-orange-400 transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.Expiry)">
+                                Expires <span>@GetSortIndicator(ColumnHeaders.Expiry)</span>
+                            </th>
+                            <th class="cursor-pointer hover:text-orange-400 transition-colors" @onclick="() => OnColumnHeaderClick(ColumnHeaders.CreatedAt)">
+                                Created <span>@GetSortIndicator(ColumnHeaders.CreatedAt)</span>
+                            </th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ban in SortBans(FilterBans(FilterActiveBans(banListData))))
+                        {
+                            <tr class="border-b border-slate-700/30 hover:bg-slate-800/30 transition-colors">
+                                <td>
+                                    <small class="text-slate-400 font-mono">@ban.SteamId</small>
+                                </td>
+                                <td>
+                                    <strong class="text-white">@(ban.Username ?? "Unknown")</strong>
+                                </td>
+                                <td>
+                                    <span class="text-slate-400">@(string.IsNullOrEmpty(ban.Notes) ? "-" : ban.Notes)</span>
+                                </td>
+                                <td class="text-center">
+                                    @if (!string.IsNullOrEmpty(ban.InternalNote))
+                                    {
+                                        <button class="text-orange-400 hover:text-orange-300 transition-colors" @onclick="() => ShowNoteModal(ban)">
+                                            <i class="fas fa-sticky-note"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-slate-600"><i class="fas fa-sticky-note"></i></span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (ban.IsGlobalBan)
+                                    {
+                                        <TwBadge Variant="danger">Global</TwBadge>
+                                    }
+                                    else
+                                    {
+                                        <TwBadge Variant="info">@(!string.IsNullOrEmpty(ban.ServerName) ? ban.ServerName : $"Server {ban.ServerId}")</TwBadge>
+                                    }
+                                </td>
+                                <td>
+                                    @if (ban.Expiry == null || ban.Expiry == -1)
+                                    {
+                                        <TwBadge Variant="default">Permanent</TwBadge>
+                                    }
+                                    else if (ban.Expiry > 0)
+                                    {
+                                        var expiryDate = UnixTimeStampToDateTime(ban.Expiry.Value);
+                                        @if (expiryDate > DateTime.UtcNow)
+                                        {
+                                            <TwBadge Variant="warning">@expiryDate.ToLocalTime().ToString("dd-MM-yyyy HH:mm")</TwBadge>
+                                        }
+                                        else
+                                        {
+                                            <TwBadge Variant="default">Expired</TwBadge>
+                                        }
+                                    }
+                                </td>
+                                <td>
+                                    <small class="text-slate-400">@ban.CreatedAt.ToLocalTime().ToString("dd-MM-yyyy HH:mm")</small>
+                                </td>
+                                <td>
+                                    <div class="flex gap-1.5">
+                                        <button class="px-2 py-1 text-xs border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 rounded transition-colors" @onclick="() => OpenEditModal(ban)">
+                                            <i class="fas fa-pen mr-1"></i>Edit
+                                        </button>
+                                        <button class="px-2 py-1 text-xs border border-red-500/50 text-red-400 hover:bg-red-500/10 rounded transition-colors" @onclick="() => OpenDeleteModal(ban)">
+                                            <i class="fas fa-trash mr-1"></i>Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </TwCard>
+    }
+
+    <!-- Player Reports Section -->
+    <div class="mt-6">
+        <ReportsCard ServerId="@activeServerId" SearchTerm="@searchTerm" />
+    </div>
+
+    @* Note Modal *@
+    @if (showNoteModal && noteBan != null)
+    {
+        <div class="fixed inset-0 z-[1060]">
+            <div class="tw-modal-backdrop" @onclick="CloseNoteModal"></div>
+            <div class="tw-modal max-w-md">
+                <div class="tw-modal-header">
+                    <h5 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <i class="fas fa-sticky-note text-orange-400"></i>Internal Note — @(noteBan.Username ?? noteBan.SteamId)
+                    </h5>
+                    <button type="button" class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="CloseNoteModal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="tw-modal-body">
+                    <p class="text-sm text-white whitespace-pre-wrap">@noteBan.InternalNote</p>
+                </div>
+                <div class="tw-modal-footer">
+                    <button type="button" class="tw-btn-secondary" @onclick="CloseNoteModal">Close</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Edit Modal *@
+    @if (showEditModal && editingBan != null)
+    {
+        <div class="fixed inset-0 z-[1060]">
+            <div class="tw-modal-backdrop" @onclick="CloseEditModal"></div>
+            <div class="tw-modal max-w-lg">
+                <div class="tw-modal-header">
+                    <h5 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <i class="fas fa-pen text-orange-400"></i>Edit Ban — @(editingBan.Username ?? editingBan.SteamId)
+                    </h5>
+                    <button type="button" class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="CloseEditModal" disabled="@isSavingEdit">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="tw-modal-body space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Reason</label>
+                        <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-slate-500 text-sm cursor-not-allowed"
+                               value="@editReason" disabled />
+                        <p class="text-xs text-slate-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Ban reason cannot be changed. To change the reason, unban the player and ban again with a new reason.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Internal Note</label>
+                        <textarea class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 text-sm"
+                                  rows="2" placeholder="Add an internal note (only visible to panel admins)..." @bind="editInternalNote"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Duration</label>
+                        <div class="flex gap-2">
+                            <input type="number" min="0" class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 text-sm"
+                                   placeholder="Amount" @bind="editDurationAmount" disabled="@editIsPermanent" />
+                            <select class="bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 text-sm"
+                                    @bind="editDurationUnit" disabled="@editIsPermanent">
+                                <option value="hours">Hours</option>
+                                <option value="days">Days</option>
+                                <option value="months">Months</option>
+                            </select>
+                        </div>
+                        <label class="flex items-center gap-2 mt-2 cursor-pointer">
+                            <input type="checkbox" class="accent-orange-500" @bind="editIsPermanent" />
+                            <span class="text-sm text-slate-400">Permanent</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" class="accent-orange-500" @bind="editIsGlobal" />
+                            <span class="text-sm text-slate-400">Global ban (applies to all servers)</span>
+                        </label>
+                    </div>
+                    @if (editError != null)
+                    {
+                        <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@editError</div>
+                    }
+                </div>
+                <div class="tw-modal-footer">
+                    <button type="button" class="tw-btn-secondary" @onclick="CloseEditModal" disabled="@isSavingEdit">Cancel</button>
+                    <button type="button" class="tw-btn-primary" @onclick="SaveEditBan" disabled="@isSavingEdit">
+                        @if (isSavingEdit)
+                        {
+                            <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-save mr-1.5"></i>
+                            <span>Save Changes</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Delete Ban Modal *@
+    @if (showDeleteModal && deletingBan != null)
+    {
+        <div class="fixed inset-0 z-[1060]">
+            <div class="tw-modal-backdrop" @onclick="CloseDeleteModal"></div>
+            <div class="tw-modal max-w-md">
+                <div class="tw-modal-header">
+                    <h5 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <i class="fas fa-trash text-red-400"></i>Delete Ban — @(deletingBan.Username ?? deletingBan.SteamId)
+                    </h5>
+                    <button type="button" class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="CloseDeleteModal" disabled="@isDeleting">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="tw-modal-body space-y-4">
+                    <div class="flex items-start gap-3 rounded-lg bg-red-500/5 border border-red-500/20 px-4 py-3">
+                        <i class="fas fa-exclamation-triangle text-red-400 mt-0.5"></i>
+                        <p class="text-sm text-slate-300">Are you sure you want to permanently delete the ban for <strong class="text-white">@(deletingBan.Username ?? deletingBan.SteamId)</strong>? The player will be unbanned from the server and the ban record will be removed.</p>
+                    </div>
+                    @if (deleteError != null)
+                    {
+                        <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@deleteError</div>
+                    }
+                </div>
+                <div class="tw-modal-footer">
+                    <button type="button" class="tw-btn-secondary" @onclick="CloseDeleteModal" disabled="@isDeleting">Cancel</button>
+                    <button type="button" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50" @onclick="ConfirmDeleteBan" disabled="@isDeleting">
+                        @if (isDeleting)
+                        {
+                            <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                            <span>Deleting...</span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-trash mr-1.5"></i>
+                            <span>Delete Ban</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</ContentWrapper>
+</PageAccessGuard>
+
+@code {
+    // Column header constants for type-safe sorting
+    private static class ColumnHeaders
+    {
+        public const string SteamID = "SteamID";
+        public const string Username = "Username";
+        public const string Notes = "Notes";
+        public const string Expiry = "Expiry";
+        public const string CreatedAt = "CreatedAt";
+    }
+
+    private List<PlayerBan_BanDTO> banListData = null;
+    private string searchTerm = "";
+    private string sortColumn = ColumnHeaders.CreatedAt;
+    private bool sortAscending = false;
+    private int activeServerId = 0;
+    private PeriodicTimer _timer = new(TimeSpan.FromSeconds(10));
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        bool hasAccess = await ServerValidationHelper.ValidateActiveServerAsync();
+        if (!hasAccess)
+            return;
+
+        activeServerId = await LocalStorage.GetItemAsync<int>("activeServerId");
+        await FetchBanList();
+
+        _ = AutoRefreshBanList();
+    }
+
+    private async Task AutoRefreshBanList()
+    {
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                await FetchBanList();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task FetchBanList()
+    {
+        try
+        {
+            int serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+            banListData = await Http.GetFromJsonAsync<List<PlayerBan_BanDTO>>($"/api/Dashboard/GetServerBans/{serverId}");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching ban list: {ex.Message}");
+            banListData = new List<PlayerBan_BanDTO>();
+        }
+    }
+
+    /// <summary>
+    /// Filters out expired and lifted bans from the active bans list
+    /// </summary>
+    private List<PlayerBan_BanDTO> FilterActiveBans(List<PlayerBan_BanDTO> bans)
+    {
+        return bans.Where(b =>
+        {
+            if (b.IsLifted) return false;
+            if (b.Expiry == null || b.Expiry == -1) return true; // Permanent
+            if (b.Expiry > 0)
+            {
+                var expiryDate = UnixTimeStampToDateTime(b.Expiry.Value);
+                return expiryDate > DateTime.UtcNow;
+            }
+            return true;
+        }).ToList();
+    }
+
+    private List<PlayerBan_BanDTO> FilterBans(List<PlayerBan_BanDTO> bans)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+            return bans;
+
+        var term = searchTerm.ToLower();
+        return bans.Where(b =>
+            (b.SteamId ?? "").ToLower().Contains(term) ||
+            (b.Username ?? "").ToLower().Contains(term) ||
+            (b.Notes ?? "").ToLower().Contains(term)
+        ).ToList();
+    }
+
+    private List<PlayerBan_BanDTO> SortBans(List<PlayerBan_BanDTO> bans)
+    {
+        var sorted = sortColumn switch
+        {
+            ColumnHeaders.SteamID => bans.OrderBy(b => b.SteamId ?? ""),
+            ColumnHeaders.Username => bans.OrderBy(b => b.Username ?? ""),
+            ColumnHeaders.Notes => bans.OrderBy(b => b.Notes ?? ""),
+            ColumnHeaders.Expiry => bans.OrderBy(b => b.Expiry ?? long.MaxValue),
+            ColumnHeaders.CreatedAt => bans.OrderBy(b => b.CreatedAt),
+            _ => bans.OrderBy(b => b.CreatedAt)
+        };
+
+        return sortAscending ? sorted.ToList() : sorted.Reverse().ToList();
+    }
+
+    private void OnColumnHeaderClick(string column)
+    {
+        if (sortColumn == column)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+    }
+
+    private string GetSortIndicator(string column)
+    {
+        if (sortColumn != column) return "";
+        return sortAscending ? " \u25B2" : " \u25BC";
+    }
+
+    private async Task OnGlobalBanToggle(PlayerBan_BanDTO ban, bool isGlobalBan)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/Dashboard/ToggleGlobalBan/{ban.Id}", new { IsGlobalBan = isGlobalBan });
+            if (response.IsSuccessStatusCode)
+            {
+                ban.IsGlobalBan = isGlobalBan;
+                ban.UpdatedAt = DateTime.UtcNow;
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating global ban status: {ex.Message}");
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Note modal
+    private bool showNoteModal = false;
+    private PlayerBan_BanDTO? noteBan = null;
+
+    private void ShowNoteModal(PlayerBan_BanDTO ban)
+    {
+        noteBan = ban;
+        showNoteModal = true;
+    }
+
+    private void CloseNoteModal()
+    {
+        showNoteModal = false;
+        noteBan = null;
+    }
+
+    // Edit modal state
+    private bool showEditModal = false;
+    private PlayerBan_BanDTO? editingBan = null;
+    private string editReason = "";
+    private string editInternalNote = "";
+    private long editDurationAmount = 0;
+    private string editDurationUnit = "hours";
+    private bool editIsPermanent = true;
+    private bool editIsGlobal = false;
+    private bool isSavingEdit = false;
+    private string? editError = null;
+
+    private void OpenEditModal(PlayerBan_BanDTO ban)
+    {
+        editingBan = ban;
+        editReason = ban.Notes ?? "";
+        editInternalNote = ban.InternalNote ?? "";
+        editIsGlobal = ban.IsGlobalBan;
+        editError = null;
+
+        if (ban.Expiry == null || ban.Expiry == -1)
+        {
+            editIsPermanent = true;
+            editDurationAmount = 0;
+            editDurationUnit = "hours";
+        }
+        else if (ban.Expiry > 0)
+        {
+            editIsPermanent = false;
+            var expiryDate = UnixTimeStampToDateTime(ban.Expiry.Value);
+            var remaining = expiryDate - DateTime.UtcNow;
+            if (remaining.TotalDays >= 30)
+            {
+                editDurationAmount = (long)Math.Ceiling(remaining.TotalDays / 30);
+                editDurationUnit = "months";
+            }
+            else if (remaining.TotalHours >= 24)
+            {
+                editDurationAmount = (long)Math.Ceiling(remaining.TotalDays);
+                editDurationUnit = "days";
+            }
+            else
+            {
+                editDurationAmount = Math.Max(1, (long)Math.Ceiling(remaining.TotalHours));
+                editDurationUnit = "hours";
+            }
+        }
+
+        showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        editingBan = null;
+        editError = null;
+    }
+
+    private long CalculateEditDurationHours()
+    {
+        if (editIsPermanent) return 0;
+        return editDurationUnit switch
+        {
+            "days" => editDurationAmount * 24,
+            "months" => editDurationAmount * 24 * 30,
+            _ => editDurationAmount
+        };
+    }
+
+    private async Task SaveEditBan()
+    {
+        if (editingBan == null) return;
+
+        isSavingEdit = true;
+        editError = null;
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"/api/Dashboard/UpdateBan/{editingBan.Id}", new
+            {
+                DurationHours = CalculateEditDurationHours(),
+                IsGlobalBan = editIsGlobal,
+                ServerId = activeServerId,
+                InternalNote = editInternalNote
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseEditModal();
+                await FetchBanList();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                editError = $"Failed to update ban: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            editError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSavingEdit = false;
+        }
+    }
+
+    // Delete modal state
+    private bool showDeleteModal = false;
+    private PlayerBan_BanDTO? deletingBan = null;
+    private bool isDeleting = false;
+    private string? deleteError = null;
+
+    private void OpenDeleteModal(PlayerBan_BanDTO ban)
+    {
+        deletingBan = ban;
+        deleteError = null;
+        showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        showDeleteModal = false;
+        deletingBan = null;
+        deleteError = null;
+    }
+
+    private async Task ConfirmDeleteBan()
+    {
+        if (deletingBan == null) return;
+
+        isDeleting = true;
+        deleteError = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/Dashboard/DeleteBan/{deletingBan.Id}", new { });
+
+            if (response.IsSuccessStatusCode)
+            {
+                CloseDeleteModal();
+                await FetchBanList();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                deleteError = $"Failed to delete ban: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            deleteError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private DateTime UnixTimeStampToDateTime(long unixTimeStamp)
+    {
+        DateTime dateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+        dateTime = dateTime.AddSeconds(unixTimeStamp).ToUniversalTime();
+        return dateTime;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _timer.Dispose();
+        _cts.Dispose();
+        await ValueTask.CompletedTask;
+    }
+}

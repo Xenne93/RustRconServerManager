@@ -1,0 +1,58 @@
+@page "/Moderators"
+
+@using Blazored.LocalStorage
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components.Page
+@using RustRconServerManager.Frontend.Components.Account
+@using RustRconServerManager.Shared.Account
+@using RustRconServerManager.Frontend.Services
+@inject ILocalStorageService LocalStorage
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject NavigationHelper NavHelper
+@attribute [Authorize]
+
+
+<PageTitleRow>Moderators</PageTitleRow>
+
+<TwCard HeaderTitle="Moderator Management" HeaderIcon="fas fa-users">
+    <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+            <i class="fas fa-user-shield text-orange-400"></i>
+        </div>
+        <div>
+            <p class="text-slate-300 text-sm">Create and manage moderator accounts with granular permissions. Assign server access and page-level permissions to control what each moderator can see and do.</p>
+        </div>
+    </div>
+</TwCard>
+
+@if (accountInfo?.isAdmin == true)
+{
+    <div class="mt-6">
+        <ModeratorAccountsCard />
+    </div>
+}
+
+@code {
+    private Account_AccountInformationDTO? accountInfo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            accountInfo = await Http.GetFromJsonAsync<Account_AccountInformationDTO>("/api/Account/AccountInformation");
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"Error fetching account information: {ex.Message}");
+            if (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                NavHelper.NavigateTo("dashboard", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching account information: {ex.Message}");
+        }
+    }
+}

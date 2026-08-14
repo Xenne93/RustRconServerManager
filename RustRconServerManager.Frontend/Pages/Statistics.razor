@@ -1,0 +1,64 @@
+@page "/Statistics"
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Frontend.Components.Dashboard
+@using RustRconServerManager.Frontend.Services
+@inject HttpClient Http
+@inject ServerValidationHelper ServerValidationHelper
+
+@attribute [Authorize]
+
+@if (!_hasServerAccess)
+{
+    <ContentWrapper>
+        <div class="flex items-center justify-center py-12">
+            <div class="tw-spinner"></div>
+        </div>
+    </ContentWrapper>
+}
+else
+{
+    <ContentWrapper>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-white">Statistics</h1>
+                <p class="text-slate-400 text-sm mt-1">Server performance and player statistics over time</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <StatCard Title="Server Performance" IconClass="fas fa-signal" IconColorClass="text-orange-400"
+                      AccentSliderClass="accent-orange-500" ActiveTabColorClass="text-orange-400"
+                      StatEndpoint="framerate" ChartId="fpsChart" ChartLabel="FPS"
+                      BorderColor="#f97316" BackgroundColor="rgba(249, 115, 22, 0.1)"
+                      ChartUnit="FPS" SummaryUnitSuffix=" FPS" Decimals="1" MinLabel="Low" LoadingLabel="FPS" />
+            <StatCard Title="Player Count" IconClass="fas fa-users" IconColorClass="text-emerald-400"
+                      AccentSliderClass="accent-orange-500" ActiveTabColorClass="text-orange-400"
+                      StatEndpoint="players" ChartId="playersChart" ChartLabel="Players"
+                      BorderColor="#10b981" BackgroundColor="rgba(16, 185, 129, 0.1)"
+                      ChartUnit="players" Decimals="0" TickStepSize="1" LoadingLabel="player" />
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <StatCard Title="Memory Usage" IconClass="fas fa-memory" IconColorClass="text-orange-400"
+                      AccentSliderClass="accent-orange-500" ActiveTabColorClass="text-orange-400"
+                      StatEndpoint="memory" ChartId="memoryChart" ChartLabel="Memory (MB)"
+                      BorderColor="#f97316" BackgroundColor="rgba(249, 115, 22, 0.1)"
+                      ChartUnit="MB" SummaryUnitSuffix=" MB" Decimals="0" LoadingLabel="memory" />
+            <StatCard Title="Entity Count" IconClass="fas fa-microchip" IconColorClass="text-violet-400"
+                      AccentSliderClass="accent-violet-500" ActiveTabColorClass="text-violet-400"
+                      StatEndpoint="entitycount" ChartId="entityChart" ChartLabel="Entities"
+                      BorderColor="#a78bfa" BackgroundColor="rgba(167, 139, 250, 0.1)"
+                      ChartUnit="entities" Decimals="0" LoadingLabel="entity" />
+        </div>
+    </ContentWrapper>
+}
+
+@code {
+    private bool _hasServerAccess = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hasServerAccess = await ServerValidationHelper.ValidateActiveServerAsync();
+    }
+}

@@ -1,0 +1,823 @@
+@page "/panelsettings"
+@using Microsoft.AspNetCore.Authorization
+@using Blazored.LocalStorage
+@using RustRconServerManager.Frontend.Components.Layout
+@using System.Collections.Generic
+@using System.Linq
+@using System.Net.Http.Json
+@using System.Text.Json
+@using RustRconServerManager.Shared.Scheduler
+@inject ILocalStorageService LocalStorage
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+@attribute [Authorize]
+
+<ContentWrapper>
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+        <div>
+            <h3 class="text-xl font-semibold text-white">Panel Settings</h3>
+            <p class="text-slate-400 text-sm mt-1">These settings apply to all your servers</p>
+        </div>
+    </div>
+
+    <!-- Two-column layout -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+        <!-- Left column: information & monitoring -->
+        <div class="space-y-6">
+            <!-- Date / Time Settings Card -->
+            <TwCard HeaderTitle="Date / Time" HeaderIcon="fas fa-clock">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+                        <h6 class="text-sm font-medium text-slate-300 mb-2">Your Local Time</h6>
+                        <p class="text-lg font-semibold text-orange-400">@CurrentLocalTime.ToLocalTime().ToString("dd-MM-yyyy HH:mm:ss")</p>
+                        <small class="text-slate-500">@userTimeZoneName</small>
+                    </div>
+                    <div class="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+                        <h6 class="text-sm font-medium text-slate-300 mb-2">UTC Time (Server)</h6>
+                        <p class="text-lg font-semibold text-slate-400">@CurrentUtcTime.ToString("dd-MM-yyyy HH:mm:ss") Z</p>
+                        <small class="text-slate-500">Coordinated Universal Time</small>
+                    </div>
+                </div>
+
+                <div class="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+                    <div class="grid grid-cols-2 gap-y-2 text-sm">
+                        <span class="text-slate-400">Timezone</span>
+                        <span class="text-white">@userTimeZoneName</span>
+                        <span class="text-slate-400">UTC Offset</span>
+                        <span class="text-white">@userUtcOffset</span>
+                        <span class="text-slate-400">Daylight Saving Time</span>
+                        <span class="@(userIsDst ? "text-emerald-400" : "text-slate-400")">@(userIsDst ? "Active (summer time)" : "Inactive (standard time)")</span>
+                    </div>
+                </div>
+
+                <p class="text-slate-500 text-xs mt-3"><i class="fas fa-info-circle mr-1"></i>All times are stored in UTC and automatically converted to your browser's timezone.</p>
+            </TwCard>
+
+            <!-- Database Storage Card -->
+            <TwCard HeaderTitle="Database Storage" HeaderIcon="fas fa-database">
+                @if (dbStatsLoading)
+                {
+                    <div class="flex items-center justify-center py-6">
+                        <div class="tw-spinner"></div>
+                        <span class="text-slate-400 text-sm ml-3">Loading database statistics...</span>
+                    </div>
+                }
+                else if (dbStatsError != null)
+                {
+                    <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
+                        <i class="fas fa-exclamation-circle mr-2"></i>@dbStatsError
+                    </div>
+                }
+                else if (dbStats != null)
+                {
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-slate-700/50">
+                                    <th class="text-left text-slate-400 font-medium py-2 px-3">Category</th>
+                                    <th class="text-right text-slate-400 font-medium py-2 px-3">Records</th>
+                                    <th class="text-right text-slate-400 font-medium py-2 px-3 hidden sm:table-cell">Oldest Record</th>
+                                    <th class="text-right text-slate-400 font-medium py-2 px-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var entry in dbStats.Entries)
+                                {
+                                    <tr class="border-b border-slate-800/50 hover:bg-slate-800/20">
+                                        <td class="py-3 px-3">
+                                            <div class="flex items-center gap-2">
+                                                <i class="@entry.Icon text-orange-400 w-5 text-center"></i>
+                                                <span class="text-white font-medium">@FormatCategoryName(entry.Category)</span>
+                                            </div>
+                                        </td>
+                                        <td class="py-3 px-3 text-right">
+                                            <span class="text-white font-semibold">@entry.Count.ToString("N0")</span>
+                                        </td>
+                                        <td class="py-3 px-3 text-right hidden sm:table-cell">
+                                            <span class="text-slate-400 text-xs">
+                                                @(entry.OldestRecord.HasValue ? entry.OldestRecord.Value.ToLocalTime().ToString("dd-MM-yyyy HH:mm") : "—")
+                                            </span>
+                                        </td>
+                                        <td class="py-3 px-3 text-right">
+                                            @if (entry.CanPurge && entry.Count > 0)
+                                            {
+                                                <div class="flex items-center justify-end gap-2">
+                                                    <select class="bg-slate-800/50 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                                                            @onchange="(e) => SetPurgeDays(entry.Category, e)">
+                                                        <option value="7">7 days</option>
+                                                        <option value="14">14 days</option>
+                                                        <option value="30" selected>30 days</option>
+                                                        <option value="60">60 days</option>
+                                                        <option value="90">90 days</option>
+                                                    </select>
+                                                    <button class="bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-medium px-3 py-1 rounded transition-colors disabled:opacity-50"
+                                                            disabled="@(purgingCategory == entry.Category)"
+                                                            @onclick="() => PurgeData(entry.Category)">
+                                                        @if (purgingCategory == entry.Category)
+                                                        {
+                                                            <i class="fas fa-spinner fa-spin mr-1"></i>
+                                                        }
+                                                        else
+                                                        {
+                                                            <i class="fas fa-trash-alt mr-1"></i>
+                                                        }
+                                                        Purge
+                                                    </button>
+                                                </div>
+                                            }
+                                            else if (!entry.CanPurge)
+                                            {
+                                                <span class="text-slate-600 text-xs">—</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-slate-600 text-xs">Empty</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(purgeSuccessMessage))
+                    {
+                        <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 text-sm mt-4">
+                            <i class="fas fa-check-circle mr-2"></i>@purgeSuccessMessage
+                        </div>
+                    }
+
+                    <div class="flex items-center justify-between mt-4">
+                        <p class="text-slate-500 text-xs mb-0">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Automatically cleaned up after 90 days.
+                        </p>
+                        <button class="text-slate-400 hover:text-white text-xs transition-colors" @onclick="LoadDatabaseStats">
+                            <i class="fas fa-sync-alt mr-1"></i>Refresh
+                        </button>
+                    </div>
+                }
+            </TwCard>
+        </div>
+
+        <!-- Right column: behavior configuration -->
+        <div class="space-y-6">
+            <!-- Logging Card -->
+            <TwCard HeaderTitle="Logging" HeaderIcon="fas fa-terminal">
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3 rounded-lg bg-blue-500/5 border border-blue-500/20 px-4 py-3">
+                        <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                        <p class="text-sm text-slate-300">Controls how much detail the server logs to its console/log file. Lower levels are useful for troubleshooting but produce a lot of output. Takes effect immediately - no restart needed.</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Minimum Log Level</label>
+                        <select class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                @bind="logLevel">
+                            <option value="Trace">Trace (extremely verbose)</option>
+                            <option value="Debug">Debug (verbose - troubleshooting)</option>
+                            <option value="Information">Information</option>
+                            <option value="Warning">Warning</option>
+                            <option value="Error">Error (severe issues only - recommended)</option>
+                            <option value="Critical">Critical (crashes only)</option>
+                        </select>
+                    </div>
+
+                    <button class="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                            @onclick="SaveLogLevel" disabled="@logLevelSaving">
+                        @if (logLevelSaving)
+                        {
+                            <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                        }
+                        <i class="fas fa-save mr-1.5"></i>Save
+                    </button>
+
+                    @if (logLevelError != null)
+                    {
+                        <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@logLevelError</div>
+                    }
+                    @if (!string.IsNullOrEmpty(logLevelSuccessMessage))
+                    {
+                        <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2 text-sm">@logLevelSuccessMessage</div>
+                    }
+                </div>
+            </TwCard>
+
+            <!-- Auto-Update Card -->
+            <TwCard HeaderTitle="Auto-Update" HeaderIcon="fas fa-cloud-arrow-down">
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3 rounded-lg bg-blue-500/5 border border-blue-500/20 px-4 py-3">
+                        <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                        <p class="text-sm text-slate-300">When enabled, the panel checks for a newer release on startup (Docker container restart, or the standalone launcher script) and installs it automatically. Disable this if you'd rather control updates manually.</p>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-slate-300">Automatically update on startup</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" @bind="autoUpdateEnabled" class="sr-only peer" />
+                            <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                        </label>
+                    </div>
+
+                    <button class="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                            @onclick="SaveAutoUpdate" disabled="@autoUpdateSaving">
+                        @if (autoUpdateSaving)
+                        {
+                            <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                        }
+                        <i class="fas fa-save mr-1.5"></i>Save
+                    </button>
+
+                    @if (autoUpdateError != null)
+                    {
+                        <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@autoUpdateError</div>
+                    }
+                    @if (!string.IsNullOrEmpty(autoUpdateSuccessMessage))
+                    {
+                        <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2 text-sm">@autoUpdateSuccessMessage</div>
+                    }
+                </div>
+            </TwCard>
+        </div>
+
+    </div>
+
+    <!-- Developer Mode -->
+    <div class="mt-6">
+        <TwCard HeaderTitle="Developer Mode" HeaderIcon="fas fa-flask">
+            <div class="space-y-4">
+                <div class="flex items-start gap-3 rounded-lg bg-blue-500/5 border border-blue-500/20 px-4 py-3">
+                    <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                    <p class="text-sm text-slate-300">Lets you assign a fake VAC-ban profile to a SteamID so you can test the VAC-ban protection rules (Server Protection settings) without needing a real banned account. Ignored entirely while disabled, even if overrides still exist below.</p>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-300">Enable developer mode</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" @bind="developerModeEnabled" class="sr-only peer" />
+                        <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                    </label>
+                </div>
+
+                <button class="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                        @onclick="SaveDeveloperMode" disabled="@developerModeSaving">
+                    @if (developerModeSaving)
+                    {
+                        <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                    }
+                    <i class="fas fa-save mr-1.5"></i>Save
+                </button>
+
+                @if (developerModeError != null)
+                {
+                    <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@developerModeError</div>
+                }
+                @if (!string.IsNullOrEmpty(developerModeSuccessMessage))
+                {
+                    <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2 text-sm">@developerModeSuccessMessage</div>
+                }
+
+                @if (developerModeEnabled)
+                {
+                    <hr class="border-slate-700/50" />
+
+                    <h6 class="text-sm font-semibold text-white flex items-center gap-2">
+                        <i class="fas fa-user-secret text-orange-400"></i>Fake VAC-Ban Profiles
+                    </h6>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                        <div class="md:col-span-1">
+                            <label class="block text-xs font-medium text-slate-400 mb-1">SteamID64</label>
+                            <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                                   placeholder="76561198000000000" @bind="newOverrideSteamId" @bind:event="oninput" />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Number of Bans</label>
+                            <input type="number" min="0" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                   @bind="newOverrideNumberOfBans" />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Days Since Last Ban</label>
+                            <input type="number" min="0" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                   @bind="newOverrideDaysSinceLastBan" />
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <label class="flex items-center gap-2 text-sm text-slate-300 whitespace-nowrap">
+                                <input type="checkbox" @bind="newOverrideVacBanned" class="rounded border-slate-700 bg-slate-800/50 text-orange-500 focus:ring-orange-500/50" />
+                                VAC Banned
+                            </label>
+                            <button class="tw-btn-primary px-4 py-2 text-sm whitespace-nowrap" @onclick="SaveVacBanOverride" disabled="@(vacOverrideSaving || string.IsNullOrWhiteSpace(newOverrideSteamId))">
+                                @if (vacOverrideSaving)
+                                {
+                                    <i class="fas fa-spinner fa-spin mr-1"></i>
+                                }
+                                else
+                                {
+                                    <i class="fas fa-plus mr-1"></i>
+                                }
+                                Add / Update
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (vacOverrideError != null)
+                    {
+                        <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@vacOverrideError</div>
+                    }
+
+                    @if (vacOverridesLoading)
+                    {
+                        <div class="flex items-center justify-center py-6">
+                            <div class="tw-spinner"></div>
+                            <span class="text-slate-400 text-sm ml-3">Loading overrides...</span>
+                        </div>
+                    }
+                    else if (vacOverrides.Count == 0)
+                    {
+                        <p class="text-slate-500 text-sm">No fake VAC-ban profiles yet - add one above.</p>
+                    }
+                    else
+                    {
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-slate-700/50">
+                                        <th class="text-left text-slate-400 font-medium py-2 px-3">SteamID64</th>
+                                        <th class="text-center text-slate-400 font-medium py-2 px-3">VAC Banned</th>
+                                        <th class="text-right text-slate-400 font-medium py-2 px-3">Bans</th>
+                                        <th class="text-right text-slate-400 font-medium py-2 px-3">Days Since Last Ban</th>
+                                        <th class="text-right text-slate-400 font-medium py-2 px-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var o in vacOverrides)
+                                    {
+                                        <tr class="border-b border-slate-800/50 hover:bg-slate-800/20">
+                                            <td class="py-3 px-3 text-white font-mono text-xs">@o.SteamId</td>
+                                            <td class="py-3 px-3 text-center">
+                                                @if (o.VACBanned)
+                                                {
+                                                    <span class="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">Banned</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400">Clean</span>
+                                                }
+                                            </td>
+                                            <td class="py-3 px-3 text-right text-white">@o.NumberOfVACBans</td>
+                                            <td class="py-3 px-3 text-right text-white">@o.DaysSinceLastBan</td>
+                                            <td class="py-3 px-3 text-right">
+                                                <button class="bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-medium px-3 py-1 rounded transition-colors disabled:opacity-50"
+                                                        disabled="@(removingSteamId == o.SteamId)"
+                                                        @onclick="() => RemoveVacBanOverride(o.SteamId)">
+                                                    @if (removingSteamId == o.SteamId)
+                                                    {
+                                                        <i class="fas fa-spinner fa-spin mr-1"></i>
+                                                    }
+                                                    else
+                                                    {
+                                                        <i class="fas fa-trash-alt mr-1"></i>
+                                                    }
+                                                    Remove
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+            </div>
+        </TwCard>
+    </div>
+</ContentWrapper>
+
+@code {
+    private DateTime CurrentUtcTime = DateTime.UtcNow;
+    private DateTime CurrentLocalTime = DateTime.UtcNow;
+    private string userTimeZoneName = "Detecting...";
+    private string userUtcOffset = "";
+    private bool userIsDst = false;
+    private string ErrorMessage = "";
+    private System.Timers.Timer _clockTimer;
+
+    // Database stats
+    private DatabaseStatsDto? dbStats;
+    private bool dbStatsLoading = false;
+    private string? dbStatsError;
+    private string? purgingCategory;
+    private string purgeSuccessMessage = "";
+    private Dictionary<string, int> purgeDaysPerCategory = new();
+
+    // Logging state
+    private string logLevel = "Error";
+    private bool logLevelSaving = false;
+    private string? logLevelError;
+    private string logLevelSuccessMessage = "";
+
+    // Auto-update state
+    private bool autoUpdateEnabled = true;
+    private bool autoUpdateSaving = false;
+    private string? autoUpdateError;
+    private string autoUpdateSuccessMessage = "";
+
+    // Developer mode state
+    private bool developerModeEnabled = false;
+    private bool developerModeSaving = false;
+    private string? developerModeError;
+    private string developerModeSuccessMessage = "";
+
+    // VAC-ban override state
+    private List<DeveloperVacBanOverrideDto> vacOverrides = new();
+    private bool vacOverridesLoading = false;
+    private string? vacOverrideError;
+    private bool vacOverrideSaving = false;
+    private string? removingSteamId;
+    private string newOverrideSteamId = "";
+    private bool newOverrideVacBanned = true;
+    private int newOverrideNumberOfBans = 1;
+    private int newOverrideDaysSinceLastBan = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadPanelSettings();
+
+            // Load database stats
+            await LoadDatabaseStats();
+
+            if (developerModeEnabled)
+            {
+                await LoadVacBanOverrides();
+            }
+
+            // Start clock update timer
+            _clockTimer = new System.Timers.Timer(1000);
+            _clockTimer.Elapsed += (s, e) => UpdateCurrentTime();
+            _clockTimer.AutoReset = true;
+            _clockTimer.Start();
+
+            UpdateCurrentTime();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error loading settings: {ex.Message}";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                userTimeZoneName = await JSRuntime.InvokeAsync<string>("eval", "Intl.DateTimeFormat().resolvedOptions().timeZone");
+                var offsetMinutes = await JSRuntime.InvokeAsync<int>("eval", "new Date().getTimezoneOffset()");
+                var offsetHours = -offsetMinutes / 60.0;
+                userUtcOffset = $"UTC{(offsetHours >= 0 ? "+" : "")}{offsetHours:0.##}";
+                userIsDst = await JSRuntime.InvokeAsync<bool>("eval",
+                    @"(function() {
+                        var jan = new Date(new Date().getFullYear(), 0, 1).getTimezoneOffset();
+                        var jul = new Date(new Date().getFullYear(), 6, 1).getTimezoneOffset();
+                        var stdOffset = Math.max(jan, jul);
+                        return new Date().getTimezoneOffset() < stdOffset;
+                    })()");
+                StateHasChanged();
+            }
+            catch
+            {
+                userTimeZoneName = "Unknown";
+                userUtcOffset = "UTC+0";
+                userIsDst = false;
+            }
+        }
+    }
+
+    private void UpdateCurrentTime()
+    {
+        CurrentUtcTime = DateTime.UtcNow;
+        CurrentLocalTime = DateTime.UtcNow;
+        StateHasChanged();
+    }
+
+    private async Task LoadDatabaseStats()
+    {
+        try
+        {
+            dbStatsLoading = true;
+            dbStatsError = null;
+
+            var response = await Http.GetAsync("/api/panelsettings/database-stats");
+            if (response.IsSuccessStatusCode)
+            {
+                dbStats = await response.Content.ReadFromJsonAsync<DatabaseStatsDto>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            else
+            {
+                dbStatsError = "Failed to load database statistics.";
+            }
+        }
+        catch (Exception ex)
+        {
+            dbStatsError = $"Error loading database statistics: {ex.Message}";
+        }
+        finally
+        {
+            dbStatsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SetPurgeDays(string category, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int days))
+        {
+            purgeDaysPerCategory[category] = days;
+        }
+    }
+
+    private int GetPurgeDays(string category)
+    {
+        return purgeDaysPerCategory.GetValueOrDefault(category, 30);
+    }
+
+    private async Task PurgeData(string category)
+    {
+        try
+        {
+            purgingCategory = category;
+            purgeSuccessMessage = "";
+
+            var days = GetPurgeDays(category);
+            var request = new PurgeDataRequestDto { Category = category, OlderThanDays = days };
+
+            var response = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "/api/panelsettings/purge-data")
+            {
+                Content = JsonContent.Create(request)
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+                var deleted = result.GetProperty("deleted").GetInt32();
+                purgeSuccessMessage = $"Successfully purged {deleted:N0} {FormatCategoryName(category).ToLower()} records older than {days} days.";
+
+                // Refresh stats
+                await LoadDatabaseStats();
+
+                // Clear message after 5 seconds
+                _ = Task.Delay(5000).ContinueWith(_ => { purgeSuccessMessage = ""; InvokeAsync(StateHasChanged); });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error purging data: {ex.Message}");
+        }
+        finally
+        {
+            purgingCategory = null;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatCategoryName(string category) => category switch
+    {
+        "ChatMessages" => "Chat Messages",
+        "ConsoleLogs" => "Console Logs",
+        "StatsHistory" => "Stats History",
+        "AggregatedStats" => "Aggregated Stats",
+        "KillLogs" => "Kill Logs",
+        "Players" => "Players",
+        _ => category
+    };
+
+    private async Task LoadPanelSettings()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/api/panelsettings/my-settings");
+            if (response.IsSuccessStatusCode)
+            {
+                var settings = await response.Content.ReadFromJsonAsync<PanelSettingsDto>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (settings != null)
+                {
+                    logLevel = string.IsNullOrEmpty(settings.MinimumLogLevel) ? "Error" : settings.MinimumLogLevel;
+                    autoUpdateEnabled = settings.AutoUpdateEnabled;
+                    developerModeEnabled = settings.DeveloperModeEnabled;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading panel settings: {ex.Message}");
+        }
+    }
+
+    private async Task SaveLogLevel()
+    {
+        logLevelSaving = true;
+        logLevelError = null;
+        logLevelSuccessMessage = "";
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync("/api/panelsettings/log-level", new SetLogLevelDto { MinimumLogLevel = logLevel });
+
+            if (response.IsSuccessStatusCode)
+            {
+                logLevelSuccessMessage = "Log level updated.";
+                _ = Task.Delay(3000).ContinueWith(_ => { logLevelSuccessMessage = ""; InvokeAsync(StateHasChanged); });
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                logLevelError = $"Failed to update log level: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            logLevelError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            logLevelSaving = false;
+        }
+    }
+
+    private async Task SaveAutoUpdate()
+    {
+        autoUpdateSaving = true;
+        autoUpdateError = null;
+        autoUpdateSuccessMessage = "";
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync("/api/panelsettings/auto-update", new SetAutoUpdateDto { AutoUpdateEnabled = autoUpdateEnabled });
+
+            if (response.IsSuccessStatusCode)
+            {
+                autoUpdateSuccessMessage = "Auto-update setting saved.";
+                _ = Task.Delay(3000).ContinueWith(_ => { autoUpdateSuccessMessage = ""; InvokeAsync(StateHasChanged); });
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                autoUpdateError = $"Failed to update auto-update setting: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            autoUpdateError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            autoUpdateSaving = false;
+        }
+    }
+
+    private async Task SaveDeveloperMode()
+    {
+        developerModeSaving = true;
+        developerModeError = null;
+        developerModeSuccessMessage = "";
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync("/api/panelsettings/developer-mode", new SetDeveloperModeDto { DeveloperModeEnabled = developerModeEnabled });
+
+            if (response.IsSuccessStatusCode)
+            {
+                developerModeSuccessMessage = "Developer mode setting saved.";
+                _ = Task.Delay(3000).ContinueWith(_ => { developerModeSuccessMessage = ""; InvokeAsync(StateHasChanged); });
+
+                if (developerModeEnabled)
+                {
+                    await LoadVacBanOverrides();
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                developerModeError = $"Failed to update developer mode: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            developerModeError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            developerModeSaving = false;
+        }
+    }
+
+    private async Task LoadVacBanOverrides()
+    {
+        try
+        {
+            vacOverridesLoading = true;
+            vacOverrideError = null;
+
+            var response = await Http.GetAsync("/api/panelsettings/developer/vac-overrides");
+            if (response.IsSuccessStatusCode)
+            {
+                vacOverrides = await response.Content.ReadFromJsonAsync<List<DeveloperVacBanOverrideDto>>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            }
+            else
+            {
+                vacOverrideError = "Failed to load VAC-ban overrides.";
+            }
+        }
+        catch (Exception ex)
+        {
+            vacOverrideError = $"Error loading VAC-ban overrides: {ex.Message}";
+        }
+        finally
+        {
+            vacOverridesLoading = false;
+        }
+    }
+
+    private async Task SaveVacBanOverride()
+    {
+        var steamId = newOverrideSteamId.Trim();
+        if (string.IsNullOrEmpty(steamId))
+            return;
+
+        vacOverrideSaving = true;
+        vacOverrideError = null;
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync("/api/panelsettings/developer/vac-overrides", new UpsertDeveloperVacBanOverrideDto
+            {
+                SteamId = steamId,
+                VACBanned = newOverrideVacBanned,
+                NumberOfVACBans = newOverrideNumberOfBans,
+                DaysSinceLastBan = newOverrideDaysSinceLastBan
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                newOverrideSteamId = "";
+                newOverrideVacBanned = true;
+                newOverrideNumberOfBans = 1;
+                newOverrideDaysSinceLastBan = 0;
+                await LoadVacBanOverrides();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                vacOverrideError = $"Failed to save override: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            vacOverrideError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            vacOverrideSaving = false;
+        }
+    }
+
+    private async Task RemoveVacBanOverride(string steamId)
+    {
+        removingSteamId = steamId;
+        vacOverrideError = null;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/panelsettings/developer/vac-overrides/{steamId}");
+            if (response.IsSuccessStatusCode)
+            {
+                vacOverrides.RemoveAll(o => o.SteamId == steamId);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                vacOverrideError = $"Failed to remove override: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            vacOverrideError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            removingSteamId = null;
+        }
+    }
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        _clockTimer?.Dispose();
+        await Task.CompletedTask;
+    }
+}

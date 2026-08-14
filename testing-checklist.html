@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RustRconServerManager - Testing Checklist</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .progress-bar {
+            background: #f0f0f0;
+            height: 30px;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 30px;
+            position: relative;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            font-size: 1.3em;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-header:hover {
+            background: linear-gradient(135deg, #7c8ff0 0%, #8a5bb8 100%);
+        }
+
+        .section-progress {
+            background: rgba(255,255,255,0.2);
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+        }
+
+        .section-content {
+            padding: 20px;
+            background: #fafafa;
+        }
+
+        .test-item {
+            background: white;
+            margin-bottom: 12px;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .test-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .test-item.checked {
+            border-left-color: #4caf50;
+            background: #f1f8f4;
+        }
+
+        .test-item input[type="checkbox"] {
+            width: 22px;
+            height: 22px;
+            margin-right: 15px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .test-item label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 1.05em;
+        }
+
+        .test-item.critical {
+            border-left-color: #f44336;
+        }
+
+        .test-item.critical::after {
+            content: "CRITICAL";
+            background: #f44336;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .subsection {
+            margin-top: 20px;
+            padding-left: 15px;
+            border-left: 3px solid #667eea;
+        }
+
+        .subsection-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 12px;
+            font-size: 1.1em;
+        }
+
+        .actions {
+            position: sticky;
+            bottom: 0;
+            background: white;
+            padding: 20px 30px;
+            border-top: 2px solid #e0e0e0;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                box-shadow: none;
+            }
+
+            .actions {
+                display: none;
+            }
+
+            .section-header {
+                page-break-after: avoid;
+            }
+
+            .test-item {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>RustRconServerManager Testing Checklist</h1>
+            <p>Comprehensive testing guide for all panel features</p>
+        </header>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill">0%</div>
+        </div>
+
+        <div class="content">
+            <!-- Authentication & Authorization -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>🔐 Authentication & Authorization</span>
+                    <span class="section-progress">0/8</span>
+                </div>
+                <div class="section-content">
+                    <div class="test-item critical">
+                        <input type="checkbox" id="auth-1" onchange="updateProgress()">
+                        <label for="auth-1">Initial setup wizard works and creates first admin account</label>
+                    </div>
+                    <div class="test-item critical">
+                        <input type="checkbox" id="auth-2" onchange="updateProgress()">
+                        <label for="auth-2">User can login with valid credentials</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="auth-3" onchange="updateProgress()">
+                        <label for="auth-3">Login fails with invalid credentials</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="auth-4" onchange="updateProgress()">
+                        <label for="auth-4">User can logout successfully</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="auth-5" onchange="updateProgress()">
+                        <label for="auth-5">Session persists on page refresh</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="auth-6" onchange="updateProgress()">
+                        <label for="auth-6">Unauthorized access to protected pages redirects to login</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="auth-7" onchange="updateProgress()">
+                        <label for="auth-7">Public self-registration is blocked (admins are created via setup wizard/Moderator management only)</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="auth-8" onchange="updateProgress()">
+                        <label for="auth-8">Account information page displays correctly</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server Management -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>🖥️ Server Management</span>
+                    <span class="section-progress">0/12</span>
+                </div>
+                <div class="section-content">
+                    <div class="subsection">
+                        <div class="subsection-title">Server Configuration</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="server-1" onchange="updateProgress()">
+                            <label for="server-1">Add new server with valid RCON credentials</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-2" onchange="updateProgress()">
+                            <label for="server-2">Adding server fails with invalid RCON credentials</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-3" onchange="updateProgress()">
+                            <label for="server-3">Edit existing server configuration</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-4" onchange="updateProgress()">
+                            <label for="server-4">Delete server from panel</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-5" onchange="updateProgress()">
+                            <label for="server-5">Server list displays all added servers</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Server Connection</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="server-6" onchange="updateProgress()">
+                            <label for="server-6">Server connects successfully on panel startup</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="server-7" onchange="updateProgress()">
+                            <label for="server-7">Server reconnects after connection loss</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-8" onchange="updateProgress()">
+                            <label for="server-8">Connection status indicator updates correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-9" onchange="updateProgress()">
+                            <label for="server-9">Multiple servers can be connected simultaneously</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Server Access Control</div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-10" onchange="updateProgress()">
+                            <label for="server-10">Users only see servers they have access to</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-11" onchange="updateProgress()">
+                            <label for="server-11">Grant user access to specific server</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="server-12" onchange="updateProgress()">
+                            <label for="server-12">Revoke user access from server</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard & Statistics -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>📊 Dashboard & Statistics</span>
+                    <span class="section-progress">0/13</span>
+                </div>
+                <div class="section-content">
+                    <div class="subsection">
+                        <div class="subsection-title">Real-time Metrics</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="dash-1" onchange="updateProgress()">
+                            <label for="dash-1">FPS counter updates in real-time</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="dash-2" onchange="updateProgress()">
+                            <label for="dash-2">Player count updates when players join/leave</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-3" onchange="updateProgress()">
+                            <label for="dash-3">Entity count displays correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-4" onchange="updateProgress()">
+                            <label for="dash-4">Server uptime counter is accurate</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-5" onchange="updateProgress()">
+                            <label for="dash-5">Memory usage displays correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-6" onchange="updateProgress()">
+                            <label for="dash-6">Server hostname displays correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-7" onchange="updateProgress()">
+                            <label for="dash-7">Server ports (game/query) display correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-8" onchange="updateProgress()">
+                            <label for="dash-8">Max players displays correctly</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Statistics & Graphs</div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-9" onchange="updateProgress()">
+                            <label for="dash-9">Player count graph displays historical data</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-10" onchange="updateProgress()">
+                            <label for="dash-10">FPS graph shows performance over time</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-11" onchange="updateProgress()">
+                            <label for="dash-11">Entity count graph displays correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-12" onchange="updateProgress()">
+                            <label for="dash-12">Aggregated stats are saved to database</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="dash-13" onchange="updateProgress()">
+                            <label for="dash-13">Stats data persists across restarts</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Console & RCON -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>💻 Console & RCON</span>
+                    <span class="section-progress">0/15</span>
+                </div>
+                <div class="section-content">
+                    <div class="subsection">
+                        <div class="subsection-title">Console Display</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="console-1" onchange="updateProgress()">
+                            <label for="console-1">Console loads recent messages on page load</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="console-2" onchange="updateProgress()">
+                            <label for="console-2">New messages appear in real-time (SignalR)</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="console-3" onchange="updateProgress()">
+                            <label for="console-3">Periodic background commands (serverinfo, playerlist, fps, etc.) are NOT shown in console</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-4" onchange="updateProgress()">
+                            <label for="console-4">Console auto-scrolls to newest messages</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-5" onchange="updateProgress()">
+                            <label for="console-5">Old messages load when scrolling up (lazy loading)</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-6" onchange="updateProgress()">
+                            <label for="console-6">Timestamps display correctly for messages</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Command Execution</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="console-7" onchange="updateProgress()">
+                            <label for="console-7">User can execute RCON commands via console input</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="console-8" onchange="updateProgress()">
+                            <label for="console-8">Command responses appear in console</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-9" onchange="updateProgress()">
+                            <label for="console-9">User-executed commands ARE shown in console</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-10" onchange="updateProgress()">
+                            <label for="console-10">Console command history works (up/down arrows)</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Server Events</div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-11" onchange="updateProgress()">
+                            <label for="console-11">Player join messages appear in console</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-12" onchange="updateProgress()">
+                            <label for="console-12">Player disconnect messages appear in console</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-13" onchange="updateProgress()">
+                            <label for="console-13">Chat messages appear in console</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-14" onchange="updateProgress()">
+                            <label for="console-14">Kill feed messages appear in console</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="console-15" onchange="updateProgress()">
+                            <label for="console-15">Server warnings/errors appear in console</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Player Management -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>👥 Player Management</span>
+                    <span class="section-progress">0/20</span>
+                </div>
+                <div class="section-content">
+                    <div class="subsection">
+                        <div class="subsection-title">Player List</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="player-1" onchange="updateProgress()">
+                            <label for="player-1">Online players list displays correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-2" onchange="updateProgress()">
+                            <label for="player-2">Player list updates when players join</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-3" onchange="updateProgress()">
+                            <label for="player-3">Player list updates when players leave</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-4" onchange="updateProgress()">
+                            <label for="player-4">Player Steam ID displays correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-5" onchange="updateProgress()">
+                            <label for="player-5">Player name displays correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-6" onchange="updateProgress()">
+                            <label for="player-6">Player ping/connection info displays</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-7" onchange="updateProgress()">
+                            <label for="player-7">Steam age displays for players</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-8" onchange="updateProgress()">
+                            <label for="player-8">Game hours display for players</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Ban System</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="player-9" onchange="updateProgress()">
+                            <label for="player-9">Ban list displays all banned players</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="player-10" onchange="updateProgress()">
+                            <label for="player-10">Can ban player by Steam ID</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-11" onchange="updateProgress()">
+                            <label for="player-11">Can ban player with custom reason</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="player-12" onchange="updateProgress()">
+                            <label for="player-12">Can unban player from ban list</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="player-13" onchange="updateProgress()">
+                            <label for="player-13">Empty ban list doesn't remove all bans (bug fix verification)</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-14" onchange="updateProgress()">
+                            <label for="player-14">Ban reason displays in ban list</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-15" onchange="updateProgress()">
+                            <label for="player-15">Ban timestamp displays correctly</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Whitelist System</div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-16" onchange="updateProgress()">
+                            <label for="player-16">Whitelist displays all whitelisted players</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-17" onchange="updateProgress()">
+                            <label for="player-17">Can add player to whitelist</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-18" onchange="updateProgress()">
+                            <label for="player-18">Can remove player from whitelist</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-19" onchange="updateProgress()">
+                            <label for="player-19">Whitelist toggle enables/disables server whitelist mode</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="player-20" onchange="updateProgress()">
+                            <label for="player-20">Non-whitelisted players cannot join when whitelist is enabled</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scheduler -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>⏰ Scheduled Commands</span>
+                    <span class="section-progress">0/11</span>
+                </div>
+                <div class="section-content">
+                    <div class="subsection">
+                        <div class="subsection-title">Schedule Management</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="sched-1" onchange="updateProgress()">
+                            <label for="sched-1">Scheduled commands list displays correctly</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="sched-2" onchange="updateProgress()">
+                            <label for="sched-2">Create new scheduled command</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="sched-3" onchange="updateProgress()">
+                            <label for="sched-3">Edit existing scheduled command</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="sched-4" onchange="updateProgress()">
+                            <label for="sched-4">Delete scheduled command</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="sched-5" onchange="updateProgress()">
+                            <label for="sched-5">Enable/disable scheduled command toggle works</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Schedule Types</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="sched-6" onchange="updateProgress()">
+                            <label for="sched-6">Interval-based schedule executes correctly (e.g., every 30 minutes)</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="sched-7" onchange="updateProgress()">
+                            <label for="sched-7">Cron-based schedule executes correctly (e.g., daily at 6 AM)</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="sched-8" onchange="updateProgress()">
+                            <label for="sched-8">One-time schedule executes at specified time</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="sched-9" onchange="updateProgress()">
+                            <label for="sched-9">Schedule next run time displays correctly</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="sched-10" onchange="updateProgress()">
+                            <label for="sched-10">Schedule last run time updates after execution</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="sched-11" onchange="updateProgress()">
+                            <label for="sched-11">Disabled schedules do not execute</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mods & Plugins -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>🔌 Mods & Plugins</span>
+                    <span class="section-progress">0/7</span>
+                </div>
+                <div class="section-content">
+                    <div class="test-item critical">
+                        <input type="checkbox" id="mod-1" onchange="updateProgress()">
+                        <label for="mod-1">Installed plugins list displays correctly</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="mod-2" onchange="updateProgress()">
+                        <label for="mod-2">Plugin version displays for each plugin</label>
+                    </div>
+                    <div class="test-item critical">
+                        <input type="checkbox" id="mod-3" onchange="updateProgress()">
+                        <label for="mod-3">Outdated plugins are detected (uMod)</label>
+                    </div>
+                    <div class="test-item critical">
+                        <input type="checkbox" id="mod-4" onchange="updateProgress()">
+                        <label for="mod-4">Outdated plugins are detected (Codefling)</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="mod-5" onchange="updateProgress()">
+                        <label for="mod-5">Latest version displays for outdated plugins</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="mod-6" onchange="updateProgress()">
+                        <label for="mod-6">Plugin status (loaded/unloaded) displays correctly</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="mod-7" onchange="updateProgress()">
+                        <label for="mod-7">Can reload/unload plugins via panel</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Background Services -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>⚙️ Background Services & Performance</span>
+                    <span class="section-progress">0/10</span>
+                </div>
+                <div class="section-content">
+                    <div class="subsection">
+                        <div class="subsection-title">Periodic RCON Commands</div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="bg-1" onchange="updateProgress()">
+                            <label for="bg-1">Light periodic commands execute (playerlist, fps, banlist, etc.)</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="bg-2" onchange="updateProgress()">
+                            <label for="bg-2">Heavy periodic commands execute (serverinfo)</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="bg-3" onchange="updateProgress()">
+                            <label for="bg-3">Background command responses do NOT appear in console</label>
+                        </div>
+                        <div class="test-item critical">
+                            <input type="checkbox" id="bg-4" onchange="updateProgress()">
+                            <label for="bg-4">Background commands do NOT save to RconLogEntries database</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="bg-5" onchange="updateProgress()">
+                            <label for="bg-5">Background commands still update stats/player data</label>
+                        </div>
+                    </div>
+
+                    <div class="subsection">
+                        <div class="subsection-title">Performance</div>
+                        <div class="test-item">
+                            <input type="checkbox" id="bg-6" onchange="updateProgress()">
+                            <label for="bg-6">Panel remains responsive during high RCON traffic</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="bg-7" onchange="updateProgress()">
+                            <label for="bg-7">No memory leaks over extended runtime</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="bg-8" onchange="updateProgress()">
+                            <label for="bg-8">Database migrations apply successfully</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="bg-9" onchange="updateProgress()">
+                            <label for="bg-9">SignalR connections remain stable</label>
+                        </div>
+                        <div class="test-item">
+                            <input type="checkbox" id="bg-10" onchange="updateProgress()">
+                            <label for="bg-10">Panel recovers gracefully from server restarts</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- UI/UX -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>🎨 UI/UX & Layout</span>
+                    <span class="section-progress">0/10</span>
+                </div>
+                <div class="section-content">
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-1" onchange="updateProgress()">
+                        <label for="ui-1">Navigation menu displays correctly</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-2" onchange="updateProgress()">
+                        <label for="ui-2">Server selector works properly</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-3" onchange="updateProgress()">
+                        <label for="ui-3">Layout is responsive on mobile devices</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-4" onchange="updateProgress()">
+                        <label for="ui-4">Layout is responsive on tablets</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-5" onchange="updateProgress()">
+                        <label for="ui-5">All icons and images load correctly</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-6" onchange="updateProgress()">
+                        <label for="ui-6">Buttons and links have proper hover states</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-7" onchange="updateProgress()">
+                        <label for="ui-7">Loading indicators display during data fetch</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-8" onchange="updateProgress()">
+                        <label for="ui-8">Error messages display user-friendly text</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-9" onchange="updateProgress()">
+                        <label for="ui-9">Success notifications appear for actions</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="ui-10" onchange="updateProgress()">
+                        <label for="ui-10">Dark mode works correctly (if implemented)</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edge Cases & Bug Fixes -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span>🐛 Edge Cases & Known Bug Fixes</span>
+                    <span class="section-progress">0/8</span>
+                </div>
+                <div class="section-content">
+                    <div class="test-item critical">
+                        <input type="checkbox" id="bug-1" onchange="updateProgress()">
+                        <label for="bug-1">[FIXED] Empty ban list no longer removes all bans</label>
+                    </div>
+                    <div class="test-item critical">
+                        <input type="checkbox" id="bug-2" onchange="updateProgress()">
+                        <label for="bug-2">[FIXED] Periodic commands don't appear in console after refresh</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="bug-3" onchange="updateProgress()">
+                        <label for="bug-3">Server with 0 online players displays correctly</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="bug-4" onchange="updateProgress()">
+                        <label for="bug-4">Long server names don't break layout</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="bug-5" onchange="updateProgress()">
+                        <label for="bug-5">Special characters in chat messages display correctly</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="bug-6" onchange="updateProgress()">
+                        <label for="bug-6">Panel handles server timeout gracefully</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="bug-7" onchange="updateProgress()">
+                        <label for="bug-7">Concurrent RCON commands don't interfere with each other</label>
+                    </div>
+                    <div class="test-item">
+                        <input type="checkbox" id="bug-8" onchange="updateProgress()">
+                        <label for="bug-8">Panel handles database connection loss gracefully</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" onclick="window.print()">Print Checklist</button>
+            <button class="btn btn-secondary" onclick="resetAll()">Reset All</button>
+            <button class="btn btn-secondary" onclick="checkAll()">Check All</button>
+            <button class="btn btn-secondary" onclick="exportProgress()">Export Progress</button>
+        </div>
+    </div>
+
+    <script>
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadProgress();
+            updateProgress();
+        });
+
+        function toggleSection(header) {
+            const content = header.nextElementSibling;
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function updateProgress() {
+            const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+            const checkedBoxes = document.querySelectorAll('input[type="checkbox"]:checked');
+            const percentage = (checkedBoxes.length / allCheckboxes.length * 100).toFixed(1);
+
+            const progressFill = document.getElementById('progressFill');
+            progressFill.style.width = percentage + '%';
+            progressFill.textContent = percentage + '%';
+
+            // Update section progress
+            document.querySelectorAll('.section').forEach(section => {
+                const sectionCheckboxes = section.querySelectorAll('input[type="checkbox"]');
+                const sectionChecked = section.querySelectorAll('input[type="checkbox"]:checked');
+                const progressSpan = section.querySelector('.section-progress');
+                progressSpan.textContent = `${sectionChecked.length}/${sectionCheckboxes.length}`;
+            });
+
+            // Update visual state of test items
+            allCheckboxes.forEach(checkbox => {
+                const testItem = checkbox.closest('.test-item');
+                if (checkbox.checked) {
+                    testItem.classList.add('checked');
+                } else {
+                    testItem.classList.remove('checked');
+                }
+            });
+
+            // Save progress
+            saveProgress();
+        }
+
+        function saveProgress() {
+            const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+            const state = {};
+            checkboxes.forEach(cb => {
+                state[cb.id] = cb.checked;
+            });
+            localStorage.setItem('rustrconservermanager-testing-progress', JSON.stringify(state));
+        }
+
+        function loadProgress() {
+            const saved = localStorage.getItem('rustrconservermanager-testing-progress');
+            if (saved) {
+                const state = JSON.parse(saved);
+                Object.keys(state).forEach(id => {
+                    const checkbox = document.getElementById(id);
+                    if (checkbox) {
+                        checkbox.checked = state[id];
+                    }
+                });
+            }
+        }
+
+        function resetAll() {
+            if (confirm('Are you sure you want to reset all checkboxes?')) {
+                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    cb.checked = false;
+                });
+                updateProgress();
+            }
+        }
+
+        function checkAll() {
+            if (confirm('Mark all items as tested?')) {
+                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    cb.checked = true;
+                });
+                updateProgress();
+            }
+        }
+
+        function exportProgress() {
+            const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+            const checkedBoxes = document.querySelectorAll('input[type="checkbox"]:checked');
+
+            let report = 'RustRconServerManager Testing Report\n';
+            report += '===========================\n\n';
+            report += `Date: ${new Date().toLocaleString()}\n`;
+            report += `Progress: ${checkedBoxes.length}/${allCheckboxes.length} (${(checkedBoxes.length / allCheckboxes.length * 100).toFixed(1)}%)\n\n`;
+
+            document.querySelectorAll('.section').forEach(section => {
+                const title = section.querySelector('.section-header span:first-child').textContent;
+                const sectionCheckboxes = section.querySelectorAll('input[type="checkbox"]');
+                const sectionChecked = section.querySelectorAll('input[type="checkbox"]:checked');
+
+                report += `\n${title}\n`;
+                report += `Progress: ${sectionChecked.length}/${sectionCheckboxes.length}\n`;
+                report += '-'.repeat(50) + '\n';
+
+                sectionCheckboxes.forEach(cb => {
+                    const label = section.querySelector(`label[for="${cb.id}"]`).textContent;
+                    report += `[${cb.checked ? '✓' : ' '}] ${label}\n`;
+                });
+            });
+
+            const blob = new Blob([report], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `rustrconservermanager-testing-report-${new Date().toISOString().split('T')[0]}.txt`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

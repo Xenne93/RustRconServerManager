@@ -1,0 +1,235 @@
+@page "/setup"
+@layout LoginLayout
+@using RustRconServerManager.Shared.Configuration
+@using Blazored.LocalStorage
+@using RustRconServerManager.Shared.Authorization
+@using RustRconServerManager.Frontend.Services
+@using RustRconServerManager.Frontend.Components.Setup
+@using System.Net.Http.Json
+@inject ILocalStorageService LocalStorage
+@inject NavigationManager NavigationManager
+@inject NavigationHelper NavHelper
+@inject IJSRuntime JS
+@inject HttpClient Http
+
+@* Show the appropriate step of the wizard *@
+@if (currentStep == SetupStep.Welcome)
+{
+    <WelcomeDialog OnNext="HandleWelcomeNext" />
+}
+else if (currentStep == SetupStep.AccountSetup)
+{
+    <section class="flex justify-center items-center min-h-screen overflow-y-auto bg-[#0f0f17] py-10">
+        <div class="w-full max-w-lg px-4">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-white">Rust RCON Server Manager - Initial Setup</h1>
+                <p class="text-slate-400 mt-2 text-lg">Create your first admin account to get started.</p>
+                <div class="w-full bg-slate-800 rounded-full h-1 mt-4">
+                    <div class="bg-emerald-500 h-1 rounded-full" style="width: 100%"></div>
+                </div>
+                <small class="text-slate-500">Step 2 of 2 - Almost there!</small>
+            </div>
+
+            <div class="rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 to-slate-950/80 backdrop-blur-sm">
+                <div class="p-6 flex flex-col items-center">
+                    <!-- Gear Icon -->
+                    <div class="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center my-4">
+                        <i class="fa-solid fa-gear text-orange-400 text-2xl"></i>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="w-full rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 mb-4 text-sm">
+                            @errorMessage
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(successMessage))
+                    {
+                        <div class="w-full rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 mb-4 text-sm">
+                            @successMessage
+                        </div>
+                    }
+
+                    <form class="text-center w-full">
+                        <div class="mb-4">
+                            <label class="block text-left text-sm text-slate-300 mb-1">Email</label>
+                            <input @bind="email" @bind:event="oninput"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                                   type="email" placeholder="admin@example.com" @onkeypress="HandleKeyPress" />
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-left text-sm text-slate-300 mb-1">Password</label>
+                            <input @bind="password" @bind:event="oninput"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                                   type="password" placeholder="Enter password" @onkeypress="HandleKeyPress" />
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-left text-sm text-slate-300 mb-1">Confirm Password</label>
+                            <input @bind="confirmPassword" @bind:event="oninput"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                                   type="password" placeholder="Re-enter password" @onkeypress="HandleKeyPress" />
+                        </div>
+
+                        <div class="flex gap-3">
+                            <button @onclick="HandleAccountBack"
+                                    class="flex-1 border border-slate-600 text-slate-300 hover:bg-slate-700 font-medium py-2.5 px-4 rounded-lg transition-colors"
+                                    type="button">
+                                &larr; Back
+                            </button>
+                            <button @onclick="DoSetup"
+                                    class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    type="button" disabled="@isProcessing">
+                                @if (isProcessing)
+                                {
+                                    <span class="tw-spinner inline-block w-4 h-4 mr-2 align-middle"></span>
+                                }
+                                Create Admin Account
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    private enum SetupStep
+    {
+        Welcome,
+        AccountSetup
+    }
+
+    private SetupStep currentStep = SetupStep.Welcome;
+
+    private bool isProcessing = false;
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string confirmPassword = string.Empty;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if setup is still required
+        try
+        {
+            var response = await Http.GetFromJsonAsync<Authorization_SetupStatusDTO>("/api/Auth/setup/status");
+            if (response != null && !response.IsSetupRequired)
+            {
+                // Setup already completed, redirect to login
+                NavHelper.NavigateTo("/login");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to check setup status: {ex.Message}";
+        }
+    }
+
+    // Step 1: Welcome -> Account Setup
+    private void HandleWelcomeNext()
+    {
+        currentStep = SetupStep.AccountSetup;
+    }
+
+    // Step 2: Account Setup back to Welcome
+    private void HandleAccountBack()
+    {
+        currentStep = SetupStep.Welcome;
+    }
+
+    private async Task HandleKeyPress(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await DoSetup();
+        }
+    }
+
+    private async Task DoSetup()
+    {
+        isProcessing = true;
+        errorMessage = null;
+        successMessage = null;
+
+        // Basic validation
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            errorMessage = "Please enter an email address";
+            isProcessing = false;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Please enter a password";
+            isProcessing = false;
+            return;
+        }
+
+        if (password != confirmPassword)
+        {
+            errorMessage = "Passwords do not match";
+            isProcessing = false;
+            return;
+        }
+
+        var setupRequest = new Authorization_SetupRequestDTO
+        {
+            Email = email,
+            Password = password,
+            ConfirmPassword = confirmPassword
+        };
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/Auth/setup", setupRequest);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<Authorization_LoginResponseDTO>();
+
+                if (result != null)
+                {
+                    // Setup successful — JWT is now in HttpOnly cookie (set by backend)
+                    successMessage = "Admin account created successfully! Redirecting...";
+
+                    // Wait a moment for the user to see the success message
+                    await Task.Delay(1500);
+                    NavHelper.NavigateTo("");
+                }
+                else
+                {
+                    errorMessage = "Setup completed but authentication failed. Please try logging in.";
+                    await Task.Delay(2000);
+                    NavHelper.NavigateTo("/login");
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    var errorResult = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>();
+                    errorMessage = errorResult?["message"]?.ToString() ?? "Setup failed. Please check your inputs.";
+                }
+                catch
+                {
+                    errorMessage = "Setup failed. Please check your inputs and try again.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred during setup: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+}

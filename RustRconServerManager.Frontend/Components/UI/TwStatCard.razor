@@ -1,0 +1,75 @@
+@* Tailwind Stat Card Component with glow effect *@
+
+<div class="@GetCardClasses()">
+    @* Subtle glow effect *@
+    <div class="tw-glow"></div>
+
+    <div class="relative flex items-start justify-between">
+        <div class="space-y-1">
+            <p class="text-xs font-medium uppercase tracking-wider text-slate-400">
+                @Title
+            </p>
+            <p class="text-3xl font-bold text-white tracking-tight">
+                @Value
+            </p>
+            @if (!string.IsNullOrEmpty(Subtitle))
+            {
+                <p class="text-xs text-slate-500">@Subtitle</p>
+            }
+            @if (!string.IsNullOrEmpty(Trend))
+            {
+                <div class="flex items-center gap-1 text-xs font-medium @(TrendUp ? "text-emerald-400" : "text-red-400")">
+                    <span>@(TrendUp ? "\u2191" : "\u2193")</span>
+                    <span>@Trend</span>
+                </div>
+            }
+        </div>
+
+        @if (Icon != null)
+        {
+            <div class="@GetIconClasses()">
+                @Icon
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public RenderFragment? Icon { get; set; }
+    [Parameter] public string? Trend { get; set; }
+    [Parameter] public bool TrendUp { get; set; } = true;
+    [Parameter] public string Variant { get; set; } = "default";
+    [Parameter] public string? Class { get; set; }
+
+    private string GetCardClasses()
+    {
+        var variantClass = Variant switch
+        {
+            "success" => "tw-stat-card-success",
+            "warning" => "tw-stat-card-warning",
+            "danger" => "tw-stat-card-danger",
+            "primary" => "tw-stat-card-primary",
+            _ => "tw-stat-card-default"
+        };
+
+        return $"{variantClass} {Class}".Trim();
+    }
+
+    private string GetIconClasses()
+    {
+        var baseClasses = "p-3 rounded-lg";
+        var variantClasses = Variant switch
+        {
+            "success" => "bg-emerald-500/20 text-emerald-400",
+            "warning" => "bg-amber-500/20 text-amber-400",
+            "danger" => "bg-red-500/20 text-red-400",
+            "primary" => "bg-orange-500/20 text-orange-400",
+            _ => "bg-slate-700/50 text-slate-300"
+        };
+
+        return $"{baseClasses} {variantClasses}";
+    }
+}

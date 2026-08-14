@@ -1,0 +1,325 @@
+@page "/manage-servers"
+@using System.Diagnostics
+@using Blazored.LocalStorage
+@using Blazored.SessionStorage
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Frontend.Components.Card
+@using RustRconServerManager.Frontend.Components.ManageServers
+@using RustRconServerManager.Frontend.Components;
+@using RustRconServerManager.Shared.ManageServers
+
+@inject ILocalStorageService LocalStorage
+@inject ISessionStorageService SessionStorage
+@inject RustRconServerManager.Frontend.Services.ServerStateService ServerState
+
+@inject HttpClient Http
+@attribute [Authorize]
+
+<ContentWrapper>
+
+    <AddServerModal @ref="addServerModal" OnServerAdded="AddServer" />
+    <EditServerModal @ref="editServerModal" OnServerUpdated="RefreshServerList" />
+    <DeleteServerPopup @ref="deleteServerPopup" OnDelete="OnDeleteServer" />
+    <InitializeRrsmModModal @ref="initializeRrsmModModal" OnInitialized="RefreshServerList" />
+    <PopupNotificationWithCloseBtn @ref="popupNotificationWithCloseBtn"
+        PopupTitle="@(ServersList.Count == 0 ? "Welcome to Rust RCON Server Manager!" : "Add or select a server")"
+        CloseBtnText="Let's do it!">
+        @if (ServersList.Count == 0)
+        {
+            <span>You haven't added any servers yet. Click <strong>Add Server</strong> to get started!</span>
+        }
+        else
+        {
+            <span>You don't have any server selected.</span>
+        }
+    </PopupNotificationWithCloseBtn>
+
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+        <h3 class="text-xl font-semibold text-white">Manage Servers</h3>
+        <div class="flex gap-2 mt-3 sm:mt-0">
+            <button class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors" type="button" @onclick="() => addServerModal?.Open()">
+                <i class="fa-solid fa-circle-plus"></i> Add Server
+            </button>
+            <button class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors" type="button" @onclick="RefreshServerList">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Info Cards Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <TwCard Class="h-full">
+            <div class="flex items-center mb-3">
+                <div class="text-orange-400 mr-2">
+                    <i class="fa-solid fa-circle-info text-2xl"></i>
+                </div>
+                <h5 class="mb-0 font-semibold text-white">Information</h5>
+            </div>
+            <p class="text-slate-400 mb-0">
+                Here you can manage your server connections. You can add, edit and remove servers.
+            </p>
+        </TwCard>
+
+        <TwCard Class="h-full">
+            <div class="flex items-center mb-3">
+                <div class="text-orange-400 mr-2">
+                    <i class="fa-solid fa-server text-2xl"></i>
+                </div>
+                <h5 class="mb-0 font-semibold text-white">Servers</h5>
+            </div>
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-slate-400">Connected servers:</span>
+                <span class="font-semibold text-orange-400">@ServerCount</span>
+            </div>
+            <button @onclick="() => addServerModal?.Open()" class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors w-full" type="button">
+                <i class="fa-solid fa-circle-plus"></i> Add New Server
+            </button>
+        </TwCard>
+    </div>
+
+    <!-- Server Cards Section -->
+    @if (ServersList.Count == 0)
+    {
+        <TwCard>
+            <div class="text-center py-5">
+                <i class="fa-solid fa-server text-5xl text-slate-400 mb-3"></i>
+                <h5 class="text-slate-400">No Servers Added Yet</h5>
+                <p class="text-slate-400 mb-4">Get started by adding your first server connection</p>
+                <button class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors" type="button" @onclick="() => addServerModal?.Open()">
+                    <i class="fa-solid fa-circle-plus"></i> Add Your First Server
+                </button>
+            </div>
+        </TwCard>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+            @foreach (var server in ServersList)
+            {
+                <ServerCard SelectedServerId="@ActiveServerId"
+                            OnSelect="HandleServerSelect"
+                            OnDeleteServer="HandleDeleteServer"
+                            OnEditServer="HandleEditServer"
+                            OnInitializeRrsmMod="HandleInitializeRrsmMod"
+                            ServerName="@server.ServerName"
+                            GamePort="@server.GamePort"
+                            QueryPort="@server.QueryPort"
+                            RconPort="@server.RconPort"
+                            ServerId="@server.ServerId"
+                            ServerAddress="@server.ServerAddress"
+                            IsConnected="@server.IsConnected"
+                            ModFramework="@server.ModFramework"
+                            RustRconServerManagerModInstalled="@server.RustRconServerManagerModInstalled"
+                            RrsmModInitialized="@server.RrsmModInitialized">
+                </ServerCard>
+            }
+        </div>
+    }
+
+</ContentWrapper>
+
+
+@code {
+    private string ServerCount = string.Empty;
+    private string ProfileId = string.Empty;
+    private string ProfileName = string.Empty;
+    private int? ActiveServerId;
+
+
+    private AddServerModal addServerModal;
+    private EditServerModal editServerModal;
+    private DeleteServerPopup? deleteServerPopup;
+    private InitializeRrsmModModal? initializeRrsmModModal;
+    private PopupNotificationWithCloseBtn popupNotificationWithCloseBtn;
+    private List<AddServerModal> Servers = new();
+
+    private List<ManageServers_ServerListEntryDTO> ServersList = new();
+
+    private CancellationTokenSource _cts = new();
+
+
+    private async Task AddServer(ManageServers_AddServerDTO newServer)
+    {
+        await RefreshServerList();
+
+        // If this was the first server, auto-select it so the sidebar immediately shows
+        // the rest of the app's pages instead of requiring a manual browser refresh.
+        if ((!ActiveServerId.HasValue || ActiveServerId.Value == 0) && ServersList.Any())
+        {
+            var firstServer = ServersList.First();
+            if (firstServer.ServerId.HasValue)
+            {
+                await HandleServerSelect(firstServer.ServerId.Value);
+            }
+        }
+    }
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get Selected Server
+        string serverId = await LocalStorage.GetItemAsStringAsync("activeServerId");
+
+        try
+        {
+            ActiveServerId = int.Parse(serverId);
+        }
+        catch
+        {
+            ActiveServerId = 0;
+        }
+
+        _ = RunPeriodicTaskAsync(_cts.Token);
+
+        await FillServerList();
+        await GetSystemProfileInformation();
+
+        // Auto-select first server if no server is selected and servers exist
+        if ((!ActiveServerId.HasValue || ActiveServerId.Value == 0) && ServersList.Any())
+        {
+            var firstServer = ServersList.First();
+            if (firstServer.ServerId.HasValue)
+            {
+                await HandleServerSelect(firstServer.ServerId.Value);
+            }
+        }
+
+        StateHasChanged();
+    }
+
+
+
+    // After Rendering Page
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+
+
+        if (firstRender)
+        {
+            // Check if there is a redirect reason
+            await ProcessRedirectReason();
+        }
+
+    }
+
+
+    // Check if there is a redirection reason saved in SessionStorage and show it
+    private async Task ProcessRedirectReason()
+    {
+        string RedirectReason = await SessionStorage.GetItemAsStringAsync("ManageServers-RedirectReason") ?? string.Empty;
+
+        if (RedirectReason != string.Empty)
+        {
+            popupNotificationWithCloseBtn.Open();
+        }
+
+        // Clear Redirect Reason
+        await SessionStorage.RemoveItemAsync("ManageServers-RedirectReason");
+
+    }
+
+    private async Task GetSystemProfileInformation()
+    {
+        try
+        {
+            Shared.ManageServers.ManageServers_AccountInformationDTO dto = await Http.GetFromJsonAsync<Shared.ManageServers.ManageServers_AccountInformationDTO>("/api/ManageServers/GetServerAccountInformation");
+            ServerCount = dto.CurrentServers.ToString();
+            ProfileId = dto.ProfileId;
+            ProfileName = dto.ProfileName;
+        }
+        catch
+        {
+            Console.WriteLine("Cannot retrieve AccountInformationMnageServers Data Transfer Object from Backend Server.");
+        }
+    }
+
+    private async Task FillServerList()
+    {
+        try
+        {
+            ServersList = await Http.GetFromJsonAsync<List<ManageServers_ServerListEntryDTO>>("/api/ManageServers/GetServerList");
+
+        }
+        catch
+        {
+            Console.WriteLine("Cannot retrieve server information.");
+        }
+    }
+
+    public async Task RefreshServerList()
+    {
+        await FillServerList();
+        StateHasChanged();
+    }
+
+    private async Task RunPeriodicTaskAsync(CancellationToken token)
+    {
+        var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await RefreshServerList();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Timer gestopt
+        }
+    }
+
+
+
+
+    private async Task HandleServerSelect(int serverId)
+    {
+        ActiveServerId = serverId;
+        await FillServerList();
+
+        // Goes through ServerStateService (not a raw PUT call) so it also updates the
+        // shared in-memory cache and raises OnServerChanged - without this, the sidebar
+        // and top navbar (which only react to that event) stay stuck showing whatever
+        // was selected when the page/app first loaded.
+        var serverName = ServersList.FirstOrDefault(s => s.ServerId == serverId)?.ServerName ?? string.Empty;
+        await ServerState.SetSelectedServerAsync(serverId, serverName);
+
+        StateHasChanged();
+    }
+
+    private async Task HandleDeleteServer(int serverId)
+    {
+        deleteServerPopup?.Open(serverId);
+    }
+
+    private async Task OnDeleteServer(int serverId)
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/Rcon/DeleteServer/{serverId}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                await RefreshServerList();
+            }
+        }
+        catch
+        {
+            Console.WriteLine("Failed to delete server");
+        }
+    }
+
+    private void HandleEditServer((int serverId, string serverName, string serverAddress, int rconPort, string modFramework, bool RustRconServerManagerModInstalled) data)
+    {
+        editServerModal?.Open(data.serverId, data.serverName, data.serverAddress, data.rconPort, data.modFramework, data.RustRconServerManagerModInstalled);
+    }
+
+    private void HandleInitializeRrsmMod((int serverId, string serverName) data)
+    {
+        initializeRrsmModModal?.Open(data.serverId, data.serverName);
+    }
+
+}

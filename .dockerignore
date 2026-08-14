@@ -1,0 +1,16 @@
+.git
+.gitignore
+.github
+.vs
+.idea
+.DS_Store
+bin
+obj
+.git
+.dockerignore
+docker-compose.yml
+.env
+.env.example
+Dockerfile
+*.md
+.editorconfig

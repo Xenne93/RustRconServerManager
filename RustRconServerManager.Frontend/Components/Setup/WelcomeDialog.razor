@@ -1,0 +1,83 @@
+@* Welcome Dialog - Step 1 of Setup Wizard *@
+
+<section class="flex justify-center items-center min-h-screen overflow-y-auto bg-[#0f0f17] py-10">
+    <div class="w-full max-w-2xl px-4">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Welcome to Rust RCON Server Manager</h1>
+            <p class="text-slate-400 mt-2 text-lg">We're going to create your administrator account now.</p>
+            <div class="w-full bg-slate-800 rounded-full h-1 mt-4">
+                <div class="bg-emerald-500 h-1 rounded-full" style="width: 50%"></div>
+            </div>
+            <small class="text-slate-500">Step 1 of 2 - Welcome</small>
+        </div>
+
+        <div class="rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 to-slate-950/80 backdrop-blur-sm">
+            <div class="p-6 flex flex-col items-center">
+                <!-- Logo -->
+                <div class="my-4">
+                    <img src="favicon.png" alt="Rust RCON Server Manager" class="w-24 h-24" />
+                </div>
+
+                <h2 class="text-xl font-semibold text-white mb-6">Professional RCON Management for Rust Servers</h2>
+
+                <!-- Feature Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mb-6 text-left">
+                    <div class="flex items-start gap-3">
+                        <span class="text-emerald-400 text-lg mt-0.5 shrink-0">
+                            <i class="fa-solid fa-check"></i>
+                        </span>
+                        <div>
+                            <p class="font-semibold text-white text-sm">Real-time Server Control</p>
+                            <p class="text-slate-500 text-xs">Manage multiple Rust servers from one dashboard</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-emerald-400 text-lg mt-0.5 shrink-0">
+                            <i class="fa-solid fa-check"></i>
+                        </span>
+                        <div>
+                            <p class="font-semibold text-white text-sm">Advanced Analytics</p>
+                            <p class="text-slate-500 text-xs">Track player statistics, kills, and server performance</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-emerald-400 text-lg mt-0.5 shrink-0">
+                            <i class="fa-solid fa-check"></i>
+                        </span>
+                        <div>
+                            <p class="font-semibold text-white text-sm">Automated Scheduling</p>
+                            <p class="text-slate-500 text-xs">Schedule commands, restarts, and maintenance tasks</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-emerald-400 text-lg mt-0.5 shrink-0">
+                            <i class="fa-solid fa-check"></i>
+                        </span>
+                        <div>
+                            <p class="font-semibold text-white text-sm">Player Protection</p>
+                            <p class="text-slate-500 text-xs">VPN blocking, VACban protection, and more</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info banner -->
+                <div class="w-full rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 mb-6 text-sm">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    Click below to create your administrator account and get started.
+                </div>
+
+                <!-- Button -->
+                <button type="button"
+                        class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2.5 px-8 rounded-lg transition-colors text-lg"
+                        @onclick="OnNext">
+                    Get Started &rarr;
+                </button>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public EventCallback OnNext { get; set; }
+}

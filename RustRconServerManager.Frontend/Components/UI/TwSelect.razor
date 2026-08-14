@@ -1,0 +1,79 @@
+@* Tailwind Select Component *@
+@typeparam TValue
+
+<div class="@(FullWidth ? "w-full" : "")">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="block text-sm font-medium text-slate-300 mb-1.5">
+            @Label
+            @if (Required)
+            {
+                <span class="text-red-400">*</span>
+            }
+        </label>
+    }
+    <select
+        class="@GetSelectClasses()"
+        value="@Value"
+        @onchange="HandleChange"
+        disabled="@Disabled"
+        @attributes="AdditionalAttributes">
+        @if (!string.IsNullOrEmpty(Placeholder))
+        {
+            <option value="" disabled selected>@Placeholder</option>
+        }
+        @ChildContent
+    </select>
+    @if (!string.IsNullOrEmpty(HelperText))
+    {
+        <p class="mt-1 text-xs text-slate-500">@HelperText</p>
+    }
+    @if (!string.IsNullOrEmpty(ErrorText))
+    {
+        <p class="mt-1 text-xs text-red-400">@ErrorText</p>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    [Parameter] public EventCallback<ChangeEventArgs> OnChange { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public string? ErrorText { get; set; }
+    [Parameter] public bool Disabled { get; set; } = false;
+    [Parameter] public bool Required { get; set; } = false;
+    [Parameter] public bool FullWidth { get; set; } = true;
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task HandleChange(ChangeEventArgs e)
+    {
+        if (e.Value != null)
+        {
+            var value = (TValue)Convert.ChangeType(e.Value, typeof(TValue));
+            await ValueChanged.InvokeAsync(value);
+        }
+        await OnChange.InvokeAsync(e);
+    }
+
+    private string GetSelectClasses()
+    {
+        var baseClasses = "tw-select";
+        var stateClasses = "";
+
+        if (!string.IsNullOrEmpty(ErrorText))
+        {
+            stateClasses += " border-red-500 focus:ring-red-500/50 focus:border-red-500";
+        }
+
+        if (Disabled)
+        {
+            stateClasses += " opacity-50 cursor-not-allowed";
+        }
+
+        return $"{baseClasses}{stateClasses} {Class}".Trim();
+    }
+}

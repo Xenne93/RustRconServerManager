@@ -1,0 +1,26 @@
+@using RustRconServerManager.Frontend.Components.UI
+
+<TwStatCard Title="Memory"
+            Value="@($"{Memory ?? 0} MB")"
+            Subtitle="RAM usage"
+            Variant="@GetVariant()">
+    <Icon>
+        <i class="fas fa-memory"></i>
+    </Icon>
+</TwStatCard>
+
+@code {
+    public int? Memory;
+
+    public async Task Update(int? memory)
+    {
+        Memory = memory;
+        StateHasChanged();
+    }
+
+    private string GetVariant()
+    {
+        if (Memory.HasValue && Memory.Value > 8000) return "danger";
+        return "default";
+    }
+}

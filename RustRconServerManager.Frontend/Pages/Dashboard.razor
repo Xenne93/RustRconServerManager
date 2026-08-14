@@ -1,0 +1,219 @@
+@page "/Dashboard"
+@using System.Net.Http.Headers
+@using Microsoft.AspNetCore.Authorization
+@using Blazored.LocalStorage;
+@using Blazored.SessionStorage;
+@using RustRconServerManager.Frontend.Components
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Frontend.Components.Dashboard
+@using RustRconServerManager.Frontend.Components.Auth
+@using RustRconServerManager.Shared.Dashboard
+@using RustRconServerManager.Frontend.Components.Console
+@using RustRconServerManager.Frontend.Services
+@inject HttpClient Http;
+@inject ILocalStorageService LocalStorage;
+@inject ISessionStorageService SessionStorage;
+@inject NavigationManager Nav;
+@inject ServerValidationHelper ServerValidationHelper;
+@implements IAsyncDisposable
+
+
+@attribute [Authorize]
+
+@if (!permissionsLoaded)
+{
+    <ContentWrapper>
+        <div class="flex items-center justify-center py-12">
+            <div class="tw-spinner"></div>
+        </div>
+    </ContentWrapper>
+}
+else
+{
+<ContentWrapper>
+
+    @* Header *@
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Dashboard</h1>
+            <p class="text-slate-400 text-sm mt-1">
+                @(ServerBaseInformation?.ServerHostname ?? "Monitor your server in real-time")
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button class="tw-btn-outline tw-btn-sm" @onclick="async () => await PeriodicFetch()">
+                <i class="fas fa-sync-alt mr-2 text-xs"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    @* Stats Grid - Always visible *@
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        <FPSCounter @ref="fpsCounter" />
+        <EntityCounter @ref="entityCounter" />
+        <OnlinePlayersCounter @ref="onlinePlayersCounter" />
+        <UptimeCounter @ref="uptimeCounter" />
+        <MemoryCounter @ref="memoryCounter" />
+    </div>
+
+    @* Console & Chat *@
+    @if (canSeeConsole && canSeeChat)
+    {
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ConsoleCard />
+            <ChatCard />
+        </div>
+    }
+    else
+    {
+        @if (canSeeConsole)
+        {
+            <div>
+                <ConsoleCard />
+            </div>
+        }
+        @if (canSeeChat)
+        {
+            <div>
+                <ChatCard />
+            </div>
+        }
+    }
+
+
+</ContentWrapper>
+}
+
+
+@code {
+
+    private readonly PeriodicTimer _timer = new(TimeSpan.FromSeconds(10));
+    private readonly CancellationTokenSource _cts = new();
+    private DateTime lastTick;
+
+    private FPSCounter fpsCounter;
+    private EntityCounter entityCounter;
+    private OnlinePlayersCounter onlinePlayersCounter;
+    private UptimeCounter uptimeCounter;
+    private MemoryCounter memoryCounter;
+    private Dashboard_ServerBaseInformationDTO ServerBaseInformation = new Dashboard_ServerBaseInformationDTO();
+
+    // Permission state
+    private bool permissionsLoaded = false;
+    private bool canSeeConsole = true;
+    private bool canSeeChat = true;
+
+
+    private bool _hasServerAccess = false;
+    private bool _initialLoadDone = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hasServerAccess = await ServerValidationHelper.ValidateActiveServerAsync();
+        if (!_hasServerAccess)
+            return;
+
+        // Fire-and-forget loop
+        _ = TickLoop();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_initialLoadDone && _hasServerAccess)
+        {
+            _initialLoadDone = true;
+            await LoadPermissions();
+            await PeriodicFetch();
+        }
+    }
+
+    private async Task LoadPermissions()
+    {
+        try
+        {
+            var basicInfo = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Account/BasicInfo");
+            var isModerator = basicInfo.GetProperty("isModerator").GetBoolean();
+
+            if (isModerator)
+            {
+                var permissions = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Moderator/MyPagePermissions");
+                if (permissions.TryGetProperty("allowedPages", out var allowedPagesElement))
+                {
+                    var allowedPages = new HashSet<string>();
+                    foreach (var page in allowedPagesElement.EnumerateArray())
+                    {
+                        allowedPages.Add(page.GetString());
+                    }
+
+                    canSeeConsole = allowedPages.Contains("dashboard-console");
+                    canSeeChat = allowedPages.Contains("dashboard-chat");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load dashboard permissions: {ex.Message}");
+        }
+
+        permissionsLoaded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+
+    private async Task TickLoop()
+    {
+        try
+        {
+
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                await PeriodicFetch();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // cancelled on dispose
+        }
+    }
+
+
+
+    private async Task PeriodicFetch()
+    {
+        try
+        {
+            lastTick = DateTime.Now;
+
+            ServerBaseInformation = await Http.GetFromJsonAsync<Dashboard_ServerBaseInformationDTO>($"/api/Dashboard/GetServerBaseInformation");
+
+            if (fpsCounter != null)
+                await fpsCounter.Update(ServerBaseInformation.LatestFpsCount.ToString());
+            if (entityCounter != null)
+                await entityCounter.Update(ServerBaseInformation.LatestEntityCount);
+            if (onlinePlayersCounter != null)
+                await onlinePlayersCounter.Update(ServerBaseInformation.LatestPlayerCount);
+            if (uptimeCounter != null)
+                await uptimeCounter.Update(ServerBaseInformation.LatestUptime);
+            if (memoryCounter != null)
+                await memoryCounter.Update(ServerBaseInformation.LatestMemory);
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Dashboard] PeriodicFetch error: {ex.Message}");
+        }
+    }
+
+
+
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _timer.Dispose();
+        _cts.Dispose();
+        await Task.CompletedTask;
+    }
+
+}

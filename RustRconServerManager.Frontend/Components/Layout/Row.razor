@@ -1,0 +1,23 @@
+<div class="row" @attributes="GetStyleAttribute()">
+    
+    @ChildContent
+    
+</div>
+
+@code {
+    [Parameter] public RenderFragment ChildContent { get; set; }
+    [Parameter] public string StyleAttributes { get; set; }
+
+    private Dictionary<string, object> GetStyleAttribute()
+    {
+        if (!string.IsNullOrWhiteSpace(StyleAttributes))
+        {
+            return new Dictionary<string, object>
+            {
+                { "style", StyleAttributes }
+            };
+        }
+
+        return new Dictionary<string, object>(); 
+    }
+}

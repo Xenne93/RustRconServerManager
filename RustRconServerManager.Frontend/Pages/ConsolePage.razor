@@ -1,0 +1,47 @@
+@page "/console"
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Frontend.Components.Auth
+@using RustRconServerManager.Frontend.Components.Console
+@using RustRconServerManager.Frontend.Services
+@inject ServerValidationHelper ServerValidationHelper
+
+@attribute [Authorize]
+
+<PageAccessGuard PageRoute="console">
+    <ContentWrapper>
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+            <div>
+                <h3 class="text-xl font-semibold text-white">Server Console</h3>
+                <p class="text-slate-400 text-sm mt-1">Live RCON console output and command input</p>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <PresetCommandsPanel OnExecuteCommand="ExecutePresetCommand" />
+        </div>
+
+        <div style="height: calc(100vh - 300px); min-height: 400px;">
+            <ConsoleCard @ref="consoleCardRef" Height="100%" />
+        </div>
+    </ContentWrapper>
+</PageAccessGuard>
+
+@code {
+    private ConsoleCard? consoleCardRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        bool hasAccess = await ServerValidationHelper.ValidateActiveServerAsync();
+        if (!hasAccess)
+            return;
+    }
+
+    private async Task ExecutePresetCommand(string command)
+    {
+        if (consoleCardRef != null)
+        {
+            await consoleCardRef.SendPresetCommand(command);
+        }
+    }
+}

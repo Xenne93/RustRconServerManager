@@ -1,0 +1,166 @@
+@using System.Net
+@using RustRconServerManager.Frontend.Components.UI
+@using RustRconServerManager.Shared.Configuration
+@using RustRconServerManager.Shared.Account
+@using RustRconServerManager.Shared.ManageServers
+@inject HttpClient Http
+
+<TwModal @bind-IsOpen="IsOpen" Title="Add New Server" Size="lg">
+    <ChildContent>
+    <div class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Server Name</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="ServerName" placeholder="My Rust Server" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Server Address</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="ServerAddress" placeholder="123.456.789.0" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">RCON Port</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="RconPort" type="number" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Server Password</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="Password" type="password" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Modding Framework</label>
+            <select class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500" @bind="ModFramework">
+                <option value="None">None</option>
+                <option value="Oxide">Oxide</option>
+                <option value="Carbon">Carbon</option>
+            </select>
+            <p class="text-xs text-slate-500 mt-1">Select the modding framework running on this server</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" @bind="RustRconServerManagerModInstalled" class="sr-only peer" />
+                <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+            </label>
+            <span class="text-sm text-slate-300">RustRconServerManager Mod Installed</span>
+        </div>
+    </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex items-center justify-between w-full">
+            <div>
+                @if (IsAdding)
+                {
+                    <span class="text-sm text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>@AddingMessage</span>
+                }
+            </div>
+            <div class="flex gap-2">
+                <button class="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors" @onclick="Close" disabled="@IsAdding">Cancel</button>
+                <button class="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @onclick="Submit" disabled="@IsAdding">Add Server</button>
+            </div>
+        </div>
+    </FooterContent>
+</TwModal>
+
+@code {
+
+    [Parameter] public EventCallback<ManageServers_AddServerDTO> OnServerAdded { get; set; }
+
+    private string ServerName;
+    private int GamePort;
+    private string Password;
+    private int RconPort;
+    private string ServerAddress;
+    private string ModFramework = "None";
+    private bool RustRconServerManagerModInstalled = false;
+    private bool IsAdding;
+    private string AddingMessage;
+
+    public bool IsOpen { get; private set; } = false;
+
+
+
+    public void Open()
+    {
+        ClearFields();
+        ResetStates();
+        IsOpen = true;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        IsOpen = false;
+        StateHasChanged();
+    }
+
+    private async Task Submit()
+    {
+        IsAdding = true;
+        AddingMessage = "Checking server connection, please wait...";
+
+        ManageServers_RconServerDTO serverDto = new ManageServers_RconServerDTO();
+        serverDto.ServerAddress = ServerAddress;
+        serverDto.RconPort = RconPort;
+        serverDto.Password = Password;
+        serverDto.ServerName = ServerName;
+        serverDto.ModFramework = ModFramework;
+        serverDto.RustRconServerManagerModInstalled = RustRconServerManagerModInstalled;
+
+
+        try
+        {
+            var result = await Http.PostAsJsonAsync("/api/Rcon/TestRconConnection", serverDto);
+
+            if (result.StatusCode == HttpStatusCode.Conflict)
+            {
+
+                AddingMessage = await result.Content.ReadAsStringAsync() ?? "Unknown conflict when adding server.";
+                StateHasChanged();
+                await Task.Delay(2000);
+                ResetStates();
+            }
+            if (result.StatusCode == HttpStatusCode.OK)
+            {
+                AddingMessage = "Connection was succesfully passed! Adding server in 3 seconds...";
+                StateHasChanged();
+                await Task.Delay(3000);
+                ManageServers_AddServerDTO dto = new ManageServers_AddServerDTO();
+                OnServerAdded.InvokeAsync(dto);
+                Close();
+
+            }
+            else
+            {
+                AddingMessage = "Cannot connect to server.";
+                StateHasChanged();
+                await Task.Delay(2000);
+                ResetStates();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching account information: {ex.Message}");
+            AddingMessage = "No valid response from backend.";
+            StateHasChanged();
+            await Task.Delay(2000);
+            ResetStates();
+        }
+
+
+
+    }
+
+    private void ResetStates()
+    {
+        IsAdding = false;
+
+    }
+
+    private void ClearFields()
+    {
+        ServerName = string.Empty;
+        GamePort = 0;
+        Password = string.Empty;
+        RconPort = 0;
+        ServerAddress = string.Empty;
+        ModFramework = "None";
+        RustRconServerManagerModInstalled = false;
+    }
+}

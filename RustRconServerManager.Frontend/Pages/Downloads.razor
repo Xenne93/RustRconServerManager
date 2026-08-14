@@ -1,0 +1,52 @@
+@page "/downloads"
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components.Page
+@attribute [Authorize]
+
+<PageTitleRow>Downloads</PageTitleRow>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <div class="rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-6">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <i class="fa-solid fa-puzzle-piece text-orange-400"></i>
+            </div>
+            <div>
+                <h5 class="text-white font-semibold mb-0">RustRconServerManager Oxide Plugin</h5>
+                <p class="text-slate-500 text-xs">Required for advanced panel features</p>
+            </div>
+        </div>
+        <p class="text-slate-400 text-sm mb-4">
+            Install this plugin on your Rust server to enable player protection, triggers, webhooks and other panel features.
+        </p>
+        <a href="https://cdn.RustRconServerManager.com/RustRconServerManager.cs"
+           download="RustRconServerManager.cs"
+           class="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm no-underline">
+            <i class="fa-solid fa-download"></i>
+            Download RustRconServerManager.cs
+        </a>
+    </div>
+
+    <div class="rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-6">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <i class="fa-solid fa-network-wired text-orange-400"></i>
+            </div>
+            <div>
+                <h5 class="text-white font-semibold mb-0">RconLimitsFix</h5>
+                <p class="text-slate-500 text-xs">Fixes RCON connection limits on Rust servers</p>
+            </div>
+        </div>
+        <p class="text-slate-400 text-sm mb-4">
+            Install this plugin to remove or increase the default RCON connection limits on your Rust server.
+        </p>
+        <a href="https://cdn.RustRconServerManager.com/RconLimitsFix.cs"
+           download="RconLimitsFix.cs"
+           class="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm no-underline">
+            <i class="fa-solid fa-download"></i>
+            Download RconLimitsFix.cs
+        </a>
+    </div>
+
+</div>

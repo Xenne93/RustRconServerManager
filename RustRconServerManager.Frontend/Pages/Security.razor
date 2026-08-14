@@ -1,0 +1,378 @@
+@page "/Security"
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components.Page
+@using RustRconServerManager.Shared.Security
+@inject HttpClient Http
+@inject IJSRuntime JS
+@attribute [Authorize]
+
+<PageTitleRow>Security Settings</PageTitleRow>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Change Password Card -->
+    <TwCard HeaderTitle="Change Password">
+        @if (!string.IsNullOrEmpty(passwordMessage))
+        {
+            <div class="rounded-lg px-4 py-3 mb-4 text-sm flex items-center justify-between @(passwordError ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400")">
+                <span>@passwordMessage</span>
+                <button class="ml-2 hover:opacity-70" @onclick="() => passwordMessage = null"><i class="fas fa-times"></i></button>
+            </div>
+        }
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">Current Password</label>
+                <input type="password" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="changePasswordDto.CurrentPassword" />
+            </div>
+
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">New Password</label>
+                <input type="password" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="changePasswordDto.NewPassword" />
+            </div>
+
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">Confirm New Password</label>
+                <input type="password" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="changePasswordDto.ConfirmPassword" />
+            </div>
+
+            @if (is2FAEnabled)
+            {
+                <div>
+                    <label class="block text-sm text-slate-300 mb-1">Two-Factor Code</label>
+                    <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" placeholder="Enter 6-digit code" @bind="changePasswordDto.TwoFactorCode" maxlength="6" />
+                    <small class="text-slate-500 text-xs mt-1 block">Enter the 6-digit code from your authenticator app</small>
+                </div>
+            }
+
+            <TwButton Variant="primary" OnClick="ChangePassword" IsLoading="@isChangingPassword">
+                Change Password
+            </TwButton>
+        </div>
+    </TwCard>
+
+    <!-- Two-Factor Authentication Card -->
+    <TwCard HeaderTitle="Two-Factor Authentication">
+        @if (isLoading2FA)
+        {
+            <div class="text-center py-8">
+                <div class="tw-spinner w-8 h-8 mx-auto"></div>
+            </div>
+        }
+        else if (!is2FAEnabled)
+        {
+            @if (show2FASetup)
+            {
+                @if (!string.IsNullOrEmpty(twoFactorMessage))
+                {
+                    <div class="rounded-lg px-4 py-3 mb-4 text-sm flex items-center justify-between @(twoFactorError ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400")">
+                        <span>@twoFactorMessage</span>
+                        <button class="ml-2 hover:opacity-70" @onclick="() => twoFactorMessage = null"><i class="fas fa-times"></i></button>
+                    </div>
+                }
+
+                <div class="rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 mb-4 text-sm">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)
+                </div>
+
+                <div class="text-center mb-4">
+                    <div id="qrcode" class="inline-block p-3 bg-white rounded-lg"></div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm text-slate-300 mb-1">Manual Entry Key</label>
+                    <div class="flex gap-2">
+                        <input type="text" class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-sm" readonly value="@manualEntryKey" />
+                        <button class="px-3 py-2 border border-slate-600 text-slate-300 hover:bg-slate-700 rounded-lg transition-colors" type="button" @onclick="CopyManualKey">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <small class="text-slate-500 text-xs mt-1 block">Use this if you can't scan the QR code</small>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm text-slate-300 mb-1">Verification Code</label>
+                    <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" placeholder="Enter 6-digit code" @bind="verificationCode" maxlength="6" />
+                    <small class="text-slate-500 text-xs mt-1 block">Enter the code from your authenticator app to verify</small>
+                </div>
+
+                <div class="flex gap-2">
+                    <TwButton Variant="success" OnClick="Enable2FA" IsLoading="@isEnabling2FA">Enable 2FA</TwButton>
+                    <TwButton Variant="secondary" OnClick="Cancel2FASetup">Cancel</TwButton>
+                </div>
+            }
+            else
+            {
+                <p class="text-slate-400 mb-2">Two-factor authentication is currently disabled.</p>
+                <p class="text-slate-300 mb-4">Enable 2FA to add an extra layer of security to your account.</p>
+                <TwButton Variant="primary" OnClick="Start2FASetup">
+                    <i class="fas fa-shield-alt mr-2"></i>Enable Two-Factor Authentication
+                </TwButton>
+            }
+        }
+        else
+        {
+            @if (!string.IsNullOrEmpty(twoFactorMessage))
+            {
+                <div class="rounded-lg px-4 py-3 mb-4 text-sm flex items-center justify-between @(twoFactorError ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400")">
+                    <span>@twoFactorMessage</span>
+                    <button class="ml-2 hover:opacity-70" @onclick="() => twoFactorMessage = null"><i class="fas fa-times"></i></button>
+                </div>
+            }
+
+            <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 mb-4 text-sm">
+                <i class="fas fa-check-circle mr-2"></i>
+                Two-factor authentication is <strong>enabled</strong>
+            </div>
+
+            <p class="text-slate-400 mb-4">Your account is protected with two-factor authentication.</p>
+
+            @if (showDisable2FA)
+            {
+                <div class="border border-slate-700/50 rounded-lg p-4 mb-4 space-y-4">
+                    <h6 class="text-white font-medium">Disable Two-Factor Authentication</h6>
+                    <div>
+                        <label class="block text-sm text-slate-300 mb-1">Password</label>
+                        <input type="password" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="disable2FADto.Password" />
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-300 mb-1">Two-Factor Code</label>
+                        <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" placeholder="Enter 6-digit code" @bind="disable2FADto.TwoFactorCode" maxlength="6" />
+                    </div>
+                    <div class="flex gap-2">
+                        <TwButton Variant="danger" OnClick="Disable2FA" IsLoading="@isDisabling2FA">Confirm Disable</TwButton>
+                        <TwButton Variant="secondary" OnClick="() => showDisable2FA = false">Cancel</TwButton>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <TwButton Variant="danger" OnClick="() => showDisable2FA = true">
+                    <i class="fas fa-times-circle mr-2"></i>Disable Two-Factor Authentication
+                </TwButton>
+            }
+        }
+    </TwCard>
+</div>
+
+@code {
+    private Security_ChangePasswordDTO changePasswordDto = new();
+    private Security_Enable2FADTO enable2FADto = new();
+    private Security_Disable2FADTO disable2FADto = new();
+
+    private bool is2FAEnabled = false;
+    private bool isLoading2FA = true;
+    private bool show2FASetup = false;
+    private bool showDisable2FA = false;
+    private bool isChangingPassword = false;
+    private bool isEnabling2FA = false;
+    private bool isDisabling2FA = false;
+
+    private string? passwordMessage;
+    private bool passwordError;
+    private string? twoFactorMessage;
+    private bool twoFactorError;
+
+    private string qrCodeUri = string.Empty;
+    private string manualEntryKey = string.Empty;
+    private string verificationCode = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load2FAStatus();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && show2FASetup && !string.IsNullOrEmpty(qrCodeUri))
+        {
+            await GenerateQRCode();
+        }
+    }
+
+    private async Task Load2FAStatus()
+    {
+        try
+        {
+            isLoading2FA = true;
+
+            var status = await Http.GetFromJsonAsync<Security_2FAStatusDTO>("/api/Security/2fa/status");
+            if (status != null)
+            {
+                is2FAEnabled = status.IsEnabled;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading 2FA status: {ex.Message}");
+        }
+        finally
+        {
+            isLoading2FA = false;
+        }
+    }
+
+    private async Task ChangePassword()
+    {
+        try
+        {
+            isChangingPassword = true;
+            passwordMessage = null;
+
+            var response = await Http.PostAsJsonAsync("/api/Security/change-password", changePasswordDto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                passwordMessage = "Password changed successfully!";
+                passwordError = false;
+                changePasswordDto = new();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                passwordMessage = error;
+                passwordError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            passwordMessage = $"Error: {ex.Message}";
+            passwordError = true;
+        }
+        finally
+        {
+            isChangingPassword = false;
+        }
+    }
+
+    private async Task Start2FASetup()
+    {
+        try
+        {
+            var response = await Http.PostAsync("/api/Security/2fa/setup", null);
+            if (response.IsSuccessStatusCode)
+            {
+                var setupData = await response.Content.ReadFromJsonAsync<Security_2FASetupResponseDTO>();
+                if (setupData != null)
+                {
+                    qrCodeUri = setupData.QrCodeUri;
+                    manualEntryKey = setupData.ManualEntryKey;
+                    show2FASetup = true;
+                    StateHasChanged();
+                    await Task.Delay(100); // Wait for DOM to update
+                    await GenerateQRCode();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            twoFactorMessage = $"Error: {ex.Message}";
+            twoFactorError = true;
+        }
+    }
+
+    private async Task GenerateQRCode()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("generateQRCode", qrCodeUri);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error generating QR code: {ex.Message}");
+        }
+    }
+
+    private async Task Enable2FA()
+    {
+        try
+        {
+            isEnabling2FA = true;
+            twoFactorMessage = null;
+
+            var dto = new Security_Enable2FADTO { VerificationCode = verificationCode };
+            var response = await Http.PostAsJsonAsync("/api/Security/2fa/enable", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                twoFactorMessage = "Two-factor authentication enabled successfully!";
+                twoFactorError = false;
+                show2FASetup = false;
+                is2FAEnabled = true;
+                verificationCode = string.Empty;
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                twoFactorMessage = error;
+                twoFactorError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            twoFactorMessage = $"Error: {ex.Message}";
+            twoFactorError = true;
+        }
+        finally
+        {
+            isEnabling2FA = false;
+        }
+    }
+
+    private async Task Disable2FA()
+    {
+        try
+        {
+            isDisabling2FA = true;
+            twoFactorMessage = null;
+
+            var response = await Http.PostAsJsonAsync("/api/Security/2fa/disable", disable2FADto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                twoFactorMessage = "Two-factor authentication disabled successfully.";
+                twoFactorError = false;
+                showDisable2FA = false;
+                is2FAEnabled = false;
+                disable2FADto = new();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                twoFactorMessage = error;
+                twoFactorError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            twoFactorMessage = $"Error: {ex.Message}";
+            twoFactorError = true;
+        }
+        finally
+        {
+            isDisabling2FA = false;
+        }
+    }
+
+    private void Cancel2FASetup()
+    {
+        show2FASetup = false;
+        verificationCode = string.Empty;
+        qrCodeUri = string.Empty;
+        manualEntryKey = string.Empty;
+    }
+
+    private async Task CopyManualKey()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", manualEntryKey);
+            twoFactorMessage = "Manual entry key copied to clipboard!";
+            twoFactorError = false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error copying to clipboard: {ex.Message}");
+        }
+    }
+}

@@ -1,0 +1,1206 @@
+@using Microsoft.JSInterop
+@using RustRconServerManager.Shared.Dashboard
+@using RustRconServerManager.Frontend.Services
+@inject IJSRuntime JSRuntime
+@inject HttpClient Http
+@inject NavigationHelper NavHelper
+
+@* Only show the MapCard if the panel mod is initialized *@
+@if (isLoading)
+{
+    <div class="tw-card">
+        <div class="tw-card-header">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-map text-orange-400 text-sm"></i>
+                <span class="text-sm font-semibold text-white">Live Map</span>
+            </div>
+        </div>
+        <div class="tw-card-body text-center py-8">
+            <div class="tw-spinner mx-auto"></div>
+        </div>
+    </div>
+}
+else if (!rrsmModInitialized)
+{
+    <div class="tw-card">
+        <div class="tw-card-header">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-map text-orange-400 text-sm"></i>
+                <span class="text-sm font-semibold text-white">Live Map</span>
+            </div>
+        </div>
+        <div class="tw-card-body text-center py-12">
+            <div class="flex flex-col items-center gap-3">
+                <i class="fas fa-puzzle-piece text-slate-500 text-3xl"></i>
+                <div>
+                    <p class="text-white font-medium text-sm mb-1">Rust RCON Server Manager Mod Required</p>
+                    <p class="text-slate-400 text-xs max-w-sm mx-auto">Install and initialize the Rust RCON Server Manager Oxide mod on your server to use the live map feature.</p>
+                </div>
+                <a href="/manage-servers" class="tw-btn-primary text-xs mt-1">
+                    <i class="fas fa-cog mr-1"></i>Manage Servers
+                </a>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    @if (showWarningModal)
+    {
+        <div class="fixed inset-0 z-[1060]">
+            <div class="tw-modal-backdrop" @onclick="CloseWarningModal"></div>
+            <div class="tw-modal max-w-lg">
+                <div class="tw-modal-header">
+                    <h5 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <i class="fas fa-exclamation-triangle text-amber-400"></i>Warning
+                    </h5>
+                    <button type="button" class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="CloseWarningModal" disabled="@isRequestingMap">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="tw-modal-body">
+                    <div class="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 mb-3">
+                        <i class="fas fa-server text-red-400 mt-0.5"></i>
+                        <div>
+                            <p class="text-red-300 font-medium text-sm mb-1">This will cause a significant lag spike!</p>
+                            <p class="text-slate-400 text-xs">Generating the map image is very CPU intensive. Players may experience disconnects ("player tick") during this process.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                        <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                        <p class="text-slate-400 text-sm">The map is automatically sent on every server restart. It is recommended to wait for a server restart instead of requesting it manually.</p>
+                    </div>
+                </div>
+                <div class="tw-modal-footer">
+                    <button type="button" class="tw-btn-secondary" @onclick="CloseWarningModal" disabled="@isRequestingMap">Cancel</button>
+                    <button type="button" class="tw-btn-primary bg-red-600 hover:bg-red-700 border-red-600" @onclick="ConfirmRequestMap" disabled="@isRequestingMap">
+                        @if (isRequestingMap)
+                        {
+                            <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                            <span>Requesting...</span>
+                        }
+                        else
+                        {
+                            <span>Request Map Anyway</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (isFullscreen)
+    {
+        <div class="map-fullscreen-overlay">
+            <div class="map-fullscreen-container">
+                @* Fullscreen Map *@
+                <div class="map-fullscreen-map">
+                    @* Square map container centered in the available space *@
+                    <div class="map-viewport map-fs-viewport"
+                         style="cursor: @(isDragging ? "grabbing" : "grab"); overflow: hidden;"
+                         @onmousedown="OnMouseDown"
+                         @onmousemove="OnMouseMove"
+                         @onmouseup="OnMouseUp"
+                         @onmouseleave="OnMouseLeave"
+                         @onwheel="OnWheel"
+                         @onwheel:preventDefault="isMapFocused"
+                         @ontouchstart="OnTouchStart"
+                         @ontouchstart:preventDefault
+                         @ontouchmove="OnTouchMove"
+                         @ontouchmove:preventDefault
+                         @ontouchend="OnTouchEnd"
+                         @ontouchend:preventDefault>
+                        <div class="map-content" style="position: absolute; width: 100%; height: 100%; transform: scale(@zoomLevel.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)) translate(@(panX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%, @(panY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%); transform-origin: center center; transition: @(isDragging ? "none" : "transform 0.1s ease-out");">
+                            @if (!string.IsNullOrEmpty(imageUrl))
+                            {
+                                <img src="@imageUrl" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;" alt="Server Map" />
+                            }
+
+                            @* Player dots *@
+                            @if (showPlayers)
+                            {
+                                @foreach (var player in FilteredPlayers)
+                                {
+                                    var posX = CoordToPercent(player.X);
+                                    var posY = CoordToPercent(-player.Y);
+                                    var isHighlighted = hoveredPlayer == player.Name || selectedPlayer == player.Name;
+                                    var dotSize = isHighlighted ? "16px" : "12px";
+                                    var inverseScale = (1.0 / zoomLevel).ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                                    <div class="player-dot map-marker"
+                                         style="position: absolute; left: @(posX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; top: @(posY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; transform: translate(-50%, -50%) scale(@inverseScale); z-index: @(isHighlighted ? "10" : "1"); display: flex; flex-direction: column; align-items: center;"
+                                         data-tooltip="@player.Name (@player.X.ToString("F0"), @player.Y.ToString("F0"))">
+                                        <i class="fas fa-person" style="font-size: @(isHighlighted ? "16px" : "12px"); color: @player.Color; filter: drop-shadow(0 0 4px @(player.Color)) drop-shadow(0 1px 2px rgba(0,0,0,0.8));"></i>
+                                        @if (selectedPlayer == player.Name || hoveredPlayer == player.Name)
+                                        {
+                                            <span style="font-size: 9px; color: @player.Color; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-weight: 600; margin-top: 1px;">@player.Name</span>
+                                        }
+                                    </div>
+                                }
+                            }
+
+                            @* Sleeping bag/bed markers (fullscreen) *@
+                            @if (showSleepingBags)
+                            {
+                                @foreach (var bag in sleepingBags)
+                                {
+                                    var bagPosX = CoordToPercent(bag.X);
+                                    var bagPosY = CoordToPercent(-bag.Y);
+                                    var bagInverseScale = (1.0 / zoomLevel).ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                                    var bagColor = bag.Type == "bed" ? "#a78bfa" : "#facc15";
+                                    <div class="map-marker" style="position: absolute; left: @(bagPosX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; top: @(bagPosY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; transform: translate(-50%, -50%) scale(@bagInverseScale); z-index: 0;"
+                                         data-tooltip="@(bag.Type == "bed" ? "Bed" : "Sleeping Bag"): @bag.Name (@bag.OwnerName)">
+                                        <i class="fas fa-bed" style="font-size: 10px; color: @bagColor; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); opacity: 0.85;"></i>
+                                    </div>
+                                }
+                            }
+
+                            @* Tool cupboard markers (fullscreen) *@
+                            @if (showToolCupboards)
+                            {
+                                @foreach (var tc in toolCupboards)
+                                {
+                                    var tcPosX = CoordToPercent(tc.X);
+                                    var tcPosY = CoordToPercent(-tc.Y);
+                                    var tcInverseScale = (1.0 / zoomLevel).ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                                    <div class="map-marker" style="position: absolute; left: @(tcPosX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; top: @(tcPosY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; transform: translate(-50%, -50%) scale(@tcInverseScale); z-index: 0;"
+                                         data-tooltip="TC: @tc.OwnerName&#10;Authorized: @tc.AuthorizedPlayers">
+                                        <i class="fas fa-house" style="font-size: 10px; color: #4ade80; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); opacity: 0.85;"></i>
+                                    </div>
+                                }
+                            }
+
+                            @* Center marker (0,0) *@
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(@((1.0 / zoomLevel).ToString("F3", System.Globalization.CultureInfo.InvariantCulture))); width: 8px; height: 8px; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.4); border-radius: 50%;"></div>
+                        </div>
+
+                        @* Compass indicators *@
+                        <div style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%); color: #ff6b6b; font-weight: bold; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;">N</div>
+                        <div style="position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.6); font-weight: bold; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;">S</div>
+                        <div style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: bold; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;">W</div>
+                        <div style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: bold; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;">E</div>
+
+                        @* Top-left controls: close + sleeping bags toggle + player toggle (mobile) *@
+                        <div style="position: absolute; top: 16px; left: 16px; display: flex; gap: 6px; z-index: 20;">
+                            <button class="tw-btn-secondary p-0 w-9 h-9 flex items-center justify-center rounded-lg opacity-90" @onclick="ToggleFullscreen" @onclick:stopPropagation="true" title="Exit Fullscreen">
+                                <i class="fas fa-compress text-xs"></i>
+                            </button>
+                            <button class="tw-btn-secondary p-0 w-9 h-9 flex items-center justify-center rounded-lg opacity-90 @(showSleepingBags ? "!text-yellow-400" : "")" @onclick="ToggleSleepingBags" @onclick:stopPropagation="true" title="@(showSleepingBags ? "Hide sleeping bags" : "Show sleeping bags")">
+                                @if (isRequestingSleepingBags)
+                                {
+                                    <span class="tw-spinner" style="width: 12px; height: 12px;"></span>
+                                }
+                                else
+                                {
+                                    <i class="fas fa-campground text-xs"></i>
+                                }
+                            </button>
+                            <button class="tw-btn-secondary p-0 w-9 h-9 flex items-center justify-center rounded-lg opacity-90 @(showToolCupboards ? "!text-green-400" : "")" @onclick="ToggleToolCupboards" @onclick:stopPropagation="true" title="@(showToolCupboards ? "Hide tool cupboards" : "Show tool cupboards")">
+                                @if (isRequestingToolCupboards)
+                                {
+                                    <span class="tw-spinner" style="width: 12px; height: 12px;"></span>
+                                }
+                                else
+                                {
+                                    <i class="fas fa-lock text-xs"></i>
+                                }
+                            </button>
+                            <button class="tw-btn-secondary p-0 w-9 h-9 items-center justify-center rounded-lg opacity-90 map-mobile-only" @onclick="ToggleMobileSidebar" @onclick:stopPropagation="true" title="Player List">
+                                <i class="fas fa-users text-xs"></i>
+                                <span style="position: absolute; top: -4px; right: -4px; background: #f97316; color: white; font-size: 9px; min-width: 16px; height: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold;">@players.Count</span>
+                            </button>
+                        </div>
+
+                        @* Zoom controls *@
+                        <div style="position: absolute; bottom: 16px; left: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 20;">
+                            <button class="tw-btn-secondary p-0 w-9 h-9 flex items-center justify-center rounded-lg opacity-90" @onclick="ZoomIn" @onclick:stopPropagation="true" title="Zoom in">
+                                <i class="fas fa-plus text-xs"></i>
+                            </button>
+                            <button class="tw-btn-secondary p-0 w-9 h-9 flex items-center justify-center rounded-lg opacity-90" @onclick="ZoomOut" @onclick:stopPropagation="true" title="Zoom out">
+                                <i class="fas fa-minus text-xs"></i>
+                            </button>
+                            <button class="tw-btn-secondary p-0 w-9 h-9 flex items-center justify-center rounded-lg opacity-90" @onclick="ResetView" @onclick:stopPropagation="true" title="Reset view">
+                                <i class="fas fa-home text-xs"></i>
+                            </button>
+                        </div>
+
+                        @* Zoom level indicator *@
+                        <div style="position: absolute; bottom: 16px; right: 16px; background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 4px; pointer-events: none;">
+                            <span style="color: rgba(255,255,255,0.8); font-size: 12px;">@(zoomLevel.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))x</span>
+                        </div>
+                    </div>
+                </div>
+
+                @* Fullscreen Player List Sidebar *@
+                <div class="map-fullscreen-sidebar @(showMobileSidebar ? "map-sidebar-open" : "")">
+                    <div class="flex justify-between items-center mb-4">
+                        <h5 class="text-lg font-bold text-white">Players Online</h5>
+                        <button class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="CloseSidebarOrFullscreen" title="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="mb-3">
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1 relative">
+                                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                                <input type="text"
+                                       class="w-full bg-slate-800/50 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50"
+                                       placeholder="Filter players..."
+                                       @bind="playerFilter" @bind:event="oninput" />
+                            </div>
+                            @if (!string.IsNullOrEmpty(playerFilter))
+                            {
+                                <button class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="() => playerFilter = string.Empty">
+                                    <i class="fas fa-times text-xs"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <div class="text-slate-500 text-xs mb-3">
+                        @if (string.IsNullOrWhiteSpace(playerFilter))
+                        {
+                            @:@players.Count players on server
+                        }
+                        else
+                        {
+                            @:@FilteredPlayers.Count() of @players.Count players
+                        }
+                    </div>
+                    <div style="flex: 1; overflow-y: auto;" class="space-y-1.5">
+                        @foreach (var player in FilteredPlayers)
+                        {
+                            var isSelected = selectedPlayer == player.Name;
+                            <div class="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors @(isSelected ? "bg-slate-700/50" : "bg-slate-800/30 hover:bg-slate-700/30")"
+                                 @onmouseenter="() => HandlePlayerHover(player.Name)"
+                                 @onmouseleave="() => HandlePlayerLeave()"
+                                 @onclick="() => HandlePlayerClick(player.Name)">
+                                <div style="width: 12px; height: 12px; background: @player.Color; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 6px @(player.Color);"></div>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="font-semibold text-white text-sm truncate">@player.Name</div>
+                                    <div class="text-slate-500 text-xs">@player.X.ToString("F0"), @player.Y.ToString("F0")</div>
+                                </div>
+                                <a href="@NavHelper.GetUrl($"inspect/{player.SteamId}")" class="flex-shrink-0 h-6 w-6 flex items-center justify-center rounded text-slate-500 hover:text-orange-400 hover:bg-slate-700/50 transition-colors" @onclick:stopPropagation="true" title="Inspect player">
+                                    <i class="fas fa-eye text-xs"></i>
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="tw-card">
+        <div class="tw-card-header">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-map text-orange-400 text-sm"></i>
+                <span class="text-sm font-semibold text-white">Live Map</span>
+                @if (hasMapData)
+                {
+                    <div class="flex items-center gap-1 ml-2">
+                        <i class="fas fa-users text-slate-400 text-xs"></i>
+                        <span class="text-xs text-slate-400">@players.Count online</span>
+                    </div>
+                }
+            </div>
+            <div class="flex items-center gap-1">
+                @if (hasMapData)
+                {
+                    <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-white" @onclick="ShowWarningModal" title="Reload map from server">
+                        <i class="fas fa-rotate text-xs"></i>
+                    </button>
+                    <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-white" @onclick="ToggleFullscreen" title="Fullscreen">
+                        <i class="fas fa-expand text-xs"></i>
+                    </button>
+                }
+            </div>
+        </div>
+        @if (hasMapData)
+        {
+            <div class="flex items-center gap-2 px-4 py-2 border-t border-slate-700/50 bg-slate-900/30">
+                <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors @(showPlayers ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:text-white hover:border-slate-600")"
+                        @onclick="TogglePlayers">
+                    <i class="fas fa-person"></i>
+                    Players
+                </button>
+                <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors @(showSleepingBags ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:text-white hover:border-slate-600")"
+                        @onclick="ToggleSleepingBags">
+                    @if (isRequestingSleepingBags)
+                    {
+                        <span class="tw-spinner" style="width: 12px; height: 12px;"></span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-bed"></i>
+                    }
+                    Sleeping Bags
+                </button>
+                <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors @(showToolCupboards ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:text-white hover:border-slate-600")"
+                        @onclick="ToggleToolCupboards">
+                    @if (isRequestingToolCupboards)
+                    {
+                        <span class="tw-spinner" style="width: 12px; height: 12px;"></span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-house"></i>
+                    }
+                    Tool Cupboards
+                </button>
+            </div>
+        }
+        <div class="tw-card-body">
+            @if (!hasMapData)
+            {
+                <div class="text-center py-10">
+                    <i class="fas fa-map-marked-alt text-4xl text-slate-600 mb-4 block"></i>
+                    <h5 class="text-slate-400 font-semibold mb-2">No Map Data Available</h5>
+                    <p class="text-slate-500 text-sm mb-6">Request the map from your server to enable the live map feature.</p>
+                    <button class="tw-btn-primary" @onclick="ShowWarningModal">
+                        <i class="fas fa-download mr-2"></i>Get Map From Server
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    @* Map Container *@
+                    <div class="xl:col-span-1">
+                        <div class="map-viewport"
+                             style="position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 0.5rem; cursor: @(isDragging ? "grabbing" : "grab"); min-height: 300px;"
+                             @onmousedown="OnMouseDown"
+                             @onmousemove="OnMouseMove"
+                             @onmouseup="OnMouseUp"
+                             @onmouseleave="OnMouseLeave"
+                             @onwheel="OnWheel"
+                             @onwheel:preventDefault="isMapFocused"
+                             @ontouchstart="OnTouchStart"
+                             @ontouchstart:preventDefault
+                             @ontouchmove="OnTouchMove"
+                             @ontouchmove:preventDefault
+                             @ontouchend="OnTouchEnd"
+                             @ontouchend:preventDefault>
+                            <div class="map-content" style="position: absolute; width: 100%; height: 100%; transform: scale(@zoomLevel.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)) translate(@(panX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%, @(panY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%); transform-origin: center center; transition: @(isDragging ? "none" : "transform 0.1s ease-out");">
+                                @if (!string.IsNullOrEmpty(imageUrl))
+                                {
+                                    <img src="@imageUrl" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;" alt="Server Map" />
+                                }
+
+                                @* Grid overlay *@
+                                <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0.15;">
+                                    <defs>
+                                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" stroke-width="0.5"/>
+                                        </pattern>
+                                    </defs>
+                                    <rect width="100%" height="100%" fill="url(#grid)" />
+                                    @* Center crosshair *@
+                                    <line x1="50%" y1="0" x2="50%" y2="100%" stroke="rgba(255,255,255,0.3)" stroke-width="1" stroke-dasharray="4,4"/>
+                                    <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(255,255,255,0.3)" stroke-width="1" stroke-dasharray="4,4"/>
+                                </svg>
+
+                                @* Player dots *@
+                                @if (showPlayers)
+                                {
+                                    @foreach (var player in FilteredPlayers)
+                                    {
+                                        var posX = CoordToPercent(player.X);
+                                        var posY = CoordToPercent(-player.Y);
+                                        var isHighlighted = hoveredPlayer == player.Name || selectedPlayer == player.Name;
+                                        var dotSize = isHighlighted ? "14px" : "10px";
+                                        var inverseScale = (1.0 / zoomLevel).ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                                        <div class="player-dot map-marker"
+                                             style="position: absolute; left: @(posX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; top: @(posY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; transform: translate(-50%, -50%) scale(@inverseScale); z-index: @(isHighlighted ? "10" : "1"); display: flex; flex-direction: column; align-items: center;"
+                                             data-tooltip="@player.Name (@player.X.ToString("F0"), @player.Y.ToString("F0"))">
+                                            <i class="fas fa-person" style="font-size: @(isHighlighted ? "14px" : "10px"); color: @player.Color; filter: drop-shadow(0 0 4px @(player.Color)) drop-shadow(0 1px 2px rgba(0,0,0,0.8)); transition: all 0.15s ease;"></i>
+                                            @if (selectedPlayer == player.Name || hoveredPlayer == player.Name)
+                                            {
+                                                <span style="font-size: 8px; color: @player.Color; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-weight: 600; margin-top: 1px;">@player.Name</span>
+                                            }
+                                        </div>
+                                    }
+                                }
+
+                                @* Sleeping bag/bed markers *@
+                                @if (showSleepingBags)
+                                {
+                                    @foreach (var bag in sleepingBags)
+                                    {
+                                        var bagPosX = CoordToPercent(bag.X);
+                                        var bagPosY = CoordToPercent(-bag.Y);
+                                        var bagInverseScale = (1.0 / zoomLevel).ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                                        var bagIcon = bag.Type == "bed" ? "fa-bed" : "fa-campground";
+                                        var bagColor = bag.Type == "bed" ? "#a78bfa" : "#facc15";
+                                        <div class="map-marker" style="position: absolute; left: @(bagPosX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; top: @(bagPosY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; transform: translate(-50%, -50%) scale(@bagInverseScale); z-index: 0;"
+                                             data-tooltip="@(bag.Type == "bed" ? "Bed" : "Sleeping Bag"): @bag.Name (@bag.OwnerName)">
+                                            <i class="fas fa-bed" style="font-size: 8px; color: @bagColor; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); opacity: 0.85;"></i>
+                                        </div>
+                                    }
+                                }
+
+                                @* Tool cupboard markers *@
+                                @if (showToolCupboards)
+                                {
+                                    @foreach (var tc in toolCupboards)
+                                    {
+                                        var tcPosX = CoordToPercent(tc.X);
+                                        var tcPosY = CoordToPercent(-tc.Y);
+                                        var tcInverseScale = (1.0 / zoomLevel).ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                                        <div class="map-marker" style="position: absolute; left: @(tcPosX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; top: @(tcPosY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; transform: translate(-50%, -50%) scale(@tcInverseScale); z-index: 0;"
+                                             data-tooltip="TC: @tc.OwnerName&#10;Authorized: @tc.AuthorizedPlayers">
+                                            <i class="fas fa-house" style="font-size: 8px; color: #4ade80; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); opacity: 0.85;"></i>
+                                        </div>
+                                    }
+                                }
+
+                                @* Center marker (0,0) *@
+                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(@((1.0 / zoomLevel).ToString("F3", System.Globalization.CultureInfo.InvariantCulture))); width: 8px; height: 8px; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.4); border-radius: 50%;"></div>
+                            </div>
+
+                            @* Compass indicators *@
+                            <div style="position: absolute; top: 8px; left: 50%; transform: translateX(-50%); color: #ff6b6b; font-weight: bold; font-size: 12px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;">N</div>
+                            <div style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.6); font-weight: bold; font-size: 12px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;">S</div>
+                            <div style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: bold; font-size: 12px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;">W</div>
+                            <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); font-weight: bold; font-size: 12px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); pointer-events: none;">E</div>
+
+                            @* Zoom controls *@
+                            <div style="position: absolute; bottom: 12px; left: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 20;">
+                                <button class="tw-btn-secondary p-0 w-8 h-8 flex items-center justify-center rounded-lg opacity-80 text-xs" @onclick="ZoomIn" @onclick:stopPropagation="true" title="Zoom in">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                <button class="tw-btn-secondary p-0 w-8 h-8 flex items-center justify-center rounded-lg opacity-80 text-xs" @onclick="ZoomOut" @onclick:stopPropagation="true" title="Zoom out">
+                                    <i class="fas fa-minus"></i>
+                                </button>
+                                <button class="tw-btn-secondary p-0 w-8 h-8 flex items-center justify-center rounded-lg opacity-80 text-xs" @onclick="ResetView" @onclick:stopPropagation="true" title="Reset view">
+                                    <i class="fas fa-home"></i>
+                                </button>
+                            </div>
+
+                            @* Map info & zoom level *@
+                            <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.5); padding: 3px 8px; border-radius: 4px; pointer-events: none;">
+                                <span style="color: rgba(255,255,255,0.7); font-size: 10px;">@(zoomLevel.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))x | World: @mapSize</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Player List *@
+                    <div class="xl:col-span-2 flex flex-col" style="min-height: 400px;">
+                        <div class="flex justify-between items-center mb-3">
+                            <h6 class="font-bold text-slate-400 text-xs uppercase tracking-wider">
+                                Online Players
+                                @if (!string.IsNullOrWhiteSpace(playerFilter))
+                                {
+                                    <span class="ml-2 text-slate-500">(@FilteredPlayers.Count() of @players.Count)</span>
+                                }
+                            </h6>
+                            <div class="relative" style="width: 200px;">
+                                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                                <input type="text"
+                                       class="w-full bg-slate-800/50 border border-slate-700 rounded-lg pl-8 pr-8 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50"
+                                       placeholder="Filter..."
+                                       @bind="playerFilter" @bind:event="oninput" />
+                                @if (!string.IsNullOrEmpty(playerFilter))
+                                {
+                                    <button class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white" @onclick="() => playerFilter = string.Empty">
+                                        <i class="fas fa-times text-xs"></i>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2" style="align-content: start;">
+                            @foreach (var player in FilteredPlayers)
+                            {
+                                var isSelected = selectedPlayer == player.Name;
+                                <div class="flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors @(isSelected ? "bg-slate-700/40" : "bg-slate-800/20 hover:bg-slate-700/30")"
+                                     @onmouseenter="() => HandlePlayerHover(player.Name)"
+                                     @onmouseleave="() => HandlePlayerLeave()"
+                                     @onclick="() => HandlePlayerClick(player.Name)">
+                                    <div style="width: 10px; height: 10px; background: @player.Color; border-radius: 50%; flex-shrink: 0;"></div>
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div class="font-semibold text-white text-sm truncate">@player.Name</div>
+                                        <div class="text-slate-500 text-xs">@player.X.ToString("F0"), @player.Y.ToString("F0")</div>
+                                    </div>
+                                    <a href="@NavHelper.GetUrl($"inspect/{player.SteamId}")" class="flex-shrink-0 h-6 w-6 flex items-center justify-center rounded text-slate-500 hover:text-orange-400 hover:bg-slate-700/50 transition-colors" @onclick:stopPropagation="true" title="Inspect player">
+                                        <i class="fas fa-eye text-xs"></i>
+                                    </a>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .map-fullscreen-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #0f0f17;
+        z-index: 9999;
+        display: flex;
+    }
+
+    .map-fullscreen-container {
+        display: flex;
+        width: 100%;
+        height: 100%;
+    }
+
+    .map-fullscreen-map {
+        flex: 1;
+        position: relative;
+        background: #0d0d1a;
+        overflow: hidden;
+    }
+
+    /* Fullscreen map viewport: square, centered */
+    .map-fs-viewport {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(calc(100vw - 360px), 100vh);
+        height: min(calc(100vw - 360px), 100vh);
+    }
+
+    .map-fullscreen-sidebar {
+        width: 320px;
+        background: #131320;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid rgba(148, 163, 184, 0.1);
+        color: #fff;
+    }
+
+    /* Mobile-only button: hidden on desktop */
+    .map-mobile-only {
+        display: none;
+    }
+
+    /* Mobile: sidebar is an overlay, map takes full screen */
+    @@media (max-width: 768px) {
+        .map-fs-viewport {
+            width: 100vw;
+            height: 100vw;
+            max-height: 100vh;
+        }
+
+        .map-fullscreen-sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 85vw;
+            max-width: 320px;
+            height: 100vh;
+            z-index: 10001;
+            transform: translateX(100%);
+            transition: transform 0.25s ease;
+            box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+        }
+
+        .map-fullscreen-sidebar.map-sidebar-open {
+            transform: translateX(0);
+        }
+
+        .map-mobile-only {
+            display: flex;
+            position: relative;
+        }
+    }
+
+    .player-dot:hover > div:first-child {
+        transform: scale(1.3);
+        transition: transform 0.2s ease;
+    }
+
+    /* Instant tooltip for map markers */
+    .map-marker[data-tooltip] {
+        position: relative;
+    }
+
+    .map-marker[data-tooltip]:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(15, 23, 42, 0.95);
+        color: #e2e8f0;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        white-space: pre;
+        pointer-events: none;
+        z-index: 100;
+        border: 1px solid rgba(100, 116, 139, 0.3);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .map-viewport {
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+        -webkit-touch-callout: none;
+    }
+
+    .map-content {
+        will-change: transform;
+    }
+</style>
+
+@code {
+    private double mapSize = 4000;
+    private int? imageWidth;
+    private int? imageHeight;
+    private List<PlayerMarker> players = new();
+    private bool isFullscreen = false;
+    private bool isLoading = true;
+    private bool rrsmModInitialized = false;
+    private bool hasMapData = false;
+    private string? imageUrl;
+    private bool showWarningModal = false;
+    private bool isRequestingMap = false;
+    private string? hoveredPlayer = null;
+    private string? selectedPlayer = null;
+    private string playerFilter = "";
+
+    // Filtered players based on search
+    private IEnumerable<PlayerMarker> FilteredPlayers => string.IsNullOrWhiteSpace(playerFilter)
+        ? players
+        : players.Where(p => p.Name.Contains(playerFilter, StringComparison.OrdinalIgnoreCase));
+
+    // Zoom and pan state
+    private const double DefaultZoom = 1.2;
+    private const double MinZoom = 1.0;
+    private const double MaxZoom = 6.0;
+    private const double ZoomStep = 0.3;
+    private double zoomLevel = DefaultZoom;
+    private double panX = 0;
+    private double panY = 0;
+    private bool isDragging = false;
+    private bool isMapFocused = false; // Only allow scroll zoom when map is clicked/focused
+    private double dragStartX;
+    private double dragStartY;
+    private double panStartX;
+    private double panStartY;
+
+    // Touch state for pinch-to-zoom
+    private double lastPinchDistance = 0;
+    private double pinchZoomStart = 1.0;
+
+    // Mobile sidebar
+    private bool showMobileSidebar = false;
+
+    // Filter toggles
+    private bool showPlayers = true;
+    private bool showSleepingBags = false;
+    private List<SleepingBagMarker> sleepingBags = new();
+    private bool isRequestingSleepingBags = false;
+
+    // Tool cupboards toggle
+    private bool showToolCupboards = false;
+    private List<ToolCupboardMarker> toolCupboards = new();
+    private bool isRequestingToolCupboards = false;
+
+    private class PlayerMarker
+    {
+        public string SteamId { get; set; } = "";
+        public string Name { get; set; } = "";
+        public double X { get; set; }
+        public double Y { get; set; }
+        public string Color { get; set; } = "#4ade80";
+    }
+
+    private class SleepingBagMarker
+    {
+        public string OwnerName { get; set; } = "";
+        public string Name { get; set; } = "";
+        public double X { get; set; }
+        public double Y { get; set; }
+        public string Type { get; set; } = "sleepingbag";
+    }
+
+    private class ToolCupboardMarker
+    {
+        public string OwnerName { get; set; } = "";
+        public double X { get; set; }
+        public double Y { get; set; }
+        public string AuthorizedPlayers { get; set; } = "";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFilterState();
+        await LoadMapData();
+    }
+
+    private async Task LoadFilterState()
+    {
+        try
+        {
+            var players = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "mapFilter_players");
+            var bags = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "mapFilter_sleepingBags");
+            var tcs = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "mapFilter_toolCupboards");
+
+            if (players != null) showPlayers = players == "true";
+            if (bags != null) showSleepingBags = bags == "true";
+            if (tcs != null) showToolCupboards = tcs == "true";
+        }
+        catch { /* localStorage not available */ }
+    }
+
+    private async Task SaveFilterState()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "mapFilter_players", showPlayers.ToString().ToLower());
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "mapFilter_sleepingBags", showSleepingBags.ToString().ToLower());
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "mapFilter_toolCupboards", showToolCupboards.ToString().ToLower());
+        }
+        catch { /* localStorage not available */ }
+    }
+
+    /// <summary>
+    /// Public method to refresh player positions. Called by Dashboard's periodic timer.
+    /// </summary>
+    public async Task RefreshPlayers()
+    {
+        if (!hasMapData || !rrsmModInitialized) return;
+
+        try
+        {
+            var response = await Http.GetAsync("/api/Dashboard/GetMapData");
+            if (response.IsSuccessStatusCode)
+            {
+                var mapData = await response.Content.ReadFromJsonAsync<Dashboard_MapDataDTO>();
+                if (mapData != null && mapData.Players != null)
+                {
+                    LoadPlayersFromMapData(mapData.Players);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refreshing player positions: {ex.Message}");
+        }
+    }
+
+    private async Task LoadMapData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.GetAsync("/api/Dashboard/GetMapData");
+            if (response.IsSuccessStatusCode)
+            {
+                var mapData = await response.Content.ReadFromJsonAsync<Dashboard_MapDataDTO>();
+                if (mapData != null)
+                {
+                    rrsmModInitialized = mapData.RrsmModInitialized;
+                    hasMapData = mapData.HasMapData;
+                    imageUrl = mapData.ImageUrl;
+                    mapSize = mapData.MapSize ?? 4000;
+                    imageWidth = mapData.ImageWidth;
+                    imageHeight = mapData.ImageHeight;
+
+                    if (hasMapData)
+                    {
+                        LoadPlayersFromMapData(mapData.Players);
+                        LoadSleepingBagsFromMapData(mapData.SleepingBags);
+                        LoadToolCupboardsFromMapData(mapData.ToolCupboards);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading map data: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void LoadPlayersFromMapData(List<MapPlayerDTO> mapPlayers)
+    {
+        var colors = new[] { "#4ade80", "#60a5fa", "#f472b6", "#facc15", "#a78bfa", "#fb923c", "#2dd4bf", "#f87171" };
+
+        players.Clear();
+        for (int i = 0; i < mapPlayers.Count; i++)
+        {
+            var mapPlayer = mapPlayers[i];
+            players.Add(new PlayerMarker
+            {
+                SteamId = mapPlayer.SteamId,
+                Name = mapPlayer.Name,
+                X = mapPlayer.X,
+                Y = mapPlayer.Z,  // In Rust, Z is the north-south axis (what we display as Y on the map)
+                Color = colors[i % colors.Length]  // Cycle through colors
+            });
+        }
+    }
+
+    private void LoadSleepingBagsFromMapData(List<MapSleepingBagDTO>? bags)
+    {
+        sleepingBags.Clear();
+        if (bags == null) return;
+        foreach (var bag in bags)
+        {
+            sleepingBags.Add(new SleepingBagMarker
+            {
+                OwnerName = bag.OwnerName,
+                Name = bag.Name,
+                X = bag.X,
+                Y = bag.Z, // In Rust, Z is the north-south axis
+                Type = bag.Type
+            });
+        }
+    }
+
+    private void LoadToolCupboardsFromMapData(List<MapToolCupboardDTO>? tcs)
+    {
+        toolCupboards.Clear();
+        if (tcs == null) return;
+        foreach (var tc in tcs)
+        {
+            toolCupboards.Add(new ToolCupboardMarker
+            {
+                OwnerName = tc.OwnerName,
+                X = tc.X,
+                Y = tc.Z, // In Rust, Z is the north-south axis
+                AuthorizedPlayers = tc.AuthorizedPlayers
+            });
+        }
+    }
+
+    private async Task TogglePlayers()
+    {
+        showPlayers = !showPlayers;
+        await SaveFilterState();
+    }
+
+    private async Task ToggleSleepingBags()
+    {
+        showSleepingBags = !showSleepingBags;
+        await SaveFilterState();
+
+        // If toggled on and no data yet, request from server
+        if (showSleepingBags && sleepingBags.Count == 0)
+        {
+            await RequestSleepingBagData();
+        }
+    }
+
+    private async Task RequestSleepingBagData()
+    {
+        isRequestingSleepingBags = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync("/api/Dashboard/RequestSleepingBags", null);
+            if (response.IsSuccessStatusCode)
+            {
+                // Data is stored synchronously by the time this returns (pulled over RCON) -
+                // reload map data which now includes the sleeping bags right away.
+                var mapResponse = await Http.GetAsync("/api/Dashboard/GetMapData");
+                if (mapResponse.IsSuccessStatusCode)
+                {
+                    var mapData = await mapResponse.Content.ReadFromJsonAsync<Dashboard_MapDataDTO>();
+                    if (mapData != null)
+                    {
+                        LoadSleepingBagsFromMapData(mapData.SleepingBags);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error requesting sleeping bags: {ex.Message}");
+        }
+        finally
+        {
+            isRequestingSleepingBags = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleToolCupboards()
+    {
+        showToolCupboards = !showToolCupboards;
+        await SaveFilterState();
+
+        // If toggled on and no data yet, request from server
+        if (showToolCupboards && toolCupboards.Count == 0)
+        {
+            await RequestToolCupboardData();
+        }
+    }
+
+    private async Task RequestToolCupboardData()
+    {
+        isRequestingToolCupboards = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync("/api/Dashboard/RequestToolCupboards", null);
+            if (response.IsSuccessStatusCode)
+            {
+                // Data is stored synchronously by the time this returns (pulled over RCON).
+                var mapResponse = await Http.GetAsync("/api/Dashboard/GetMapData");
+                if (mapResponse.IsSuccessStatusCode)
+                {
+                    var mapData = await mapResponse.Content.ReadFromJsonAsync<Dashboard_MapDataDTO>();
+                    if (mapData != null)
+                    {
+                        LoadToolCupboardsFromMapData(mapData.ToolCupboards);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error requesting tool cupboards: {ex.Message}");
+        }
+        finally
+        {
+            isRequestingToolCupboards = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleFullscreen()
+    {
+        isFullscreen = !isFullscreen;
+    }
+
+    /// <summary>
+    /// Converts a Rust world coordinate to a percentage position on the map image.
+    /// The plugin renders with scale = 2000/mapSize, so the image covers 1.5x mapSize.
+    /// </summary>
+    private double CoordToPercent(double coord)
+    {
+        double effectiveSize = mapSize * 1.5;
+        return ((coord + effectiveSize / 2.0) / effectiveSize) * 100.0;
+    }
+
+    private void HandlePlayerHover(string playerName)
+    {
+        hoveredPlayer = playerName;
+    }
+
+    private void HandlePlayerLeave()
+    {
+        hoveredPlayer = null;
+    }
+
+    private void HandlePlayerClick(string playerName)
+    {
+        selectedPlayer = selectedPlayer == playerName ? null : playerName;
+    }
+
+    private void ZoomIn()
+    {
+        zoomLevel = Math.Min(MaxZoom, zoomLevel + ZoomStep);
+        ClampPan();
+    }
+
+    private void ZoomOut()
+    {
+        zoomLevel = Math.Max(MinZoom, zoomLevel - ZoomStep);
+        ClampPan();
+    }
+
+    private void ResetView()
+    {
+        zoomLevel = DefaultZoom;
+        panX = 0;
+        panY = 0;
+    }
+
+    private void OnWheel(WheelEventArgs e)
+    {
+        // Only zoom if the map has been clicked (focused) to prevent hijacking page scroll
+        if (!isMapFocused) return;
+
+        if (e.DeltaY < 0)
+            zoomLevel = Math.Min(MaxZoom, zoomLevel + ZoomStep * 0.5);
+        else
+            zoomLevel = Math.Max(MinZoom, zoomLevel - ZoomStep * 0.5);
+        ClampPan();
+    }
+
+    private void OnMouseDown(MouseEventArgs e)
+    {
+        isDragging = true;
+        isMapFocused = true; // Enable scroll zoom after clicking the map
+        dragStartX = e.ClientX;
+        dragStartY = e.ClientY;
+        panStartX = panX;
+        panStartY = panY;
+    }
+
+    private void OnMouseMove(MouseEventArgs e)
+    {
+        if (!isDragging) return;
+
+        // Convert pixel movement to percentage (based on container size estimate)
+        // Divide by zoom to make panning feel consistent at different zoom levels
+        double deltaX = (e.ClientX - dragStartX) / 3.0 / zoomLevel;
+        double deltaY = (e.ClientY - dragStartY) / 3.0 / zoomLevel;
+
+        panX = panStartX + deltaX;
+        panY = panStartY + deltaY;
+        ClampPan();
+    }
+
+    private void OnMouseUp(MouseEventArgs e)
+    {
+        isDragging = false;
+    }
+
+    private void OnMouseLeave(MouseEventArgs e)
+    {
+        isDragging = false;
+        isMapFocused = false; // Disable scroll zoom when mouse leaves the map
+    }
+
+    // Touch event handlers for mobile
+    private void OnTouchStart(TouchEventArgs e)
+    {
+        if (e.Touches.Length == 1)
+        {
+            // Single finger: start drag
+            isDragging = true;
+            dragStartX = e.Touches[0].ClientX;
+            dragStartY = e.Touches[0].ClientY;
+            panStartX = panX;
+            panStartY = panY;
+            lastPinchDistance = 0;
+        }
+        else if (e.Touches.Length == 2)
+        {
+            // Two fingers: start pinch-to-zoom
+            isDragging = false;
+            var dx = e.Touches[0].ClientX - e.Touches[1].ClientX;
+            var dy = e.Touches[0].ClientY - e.Touches[1].ClientY;
+            lastPinchDistance = Math.Sqrt(dx * dx + dy * dy);
+            pinchZoomStart = zoomLevel;
+        }
+    }
+
+    private void OnTouchMove(TouchEventArgs e)
+    {
+        if (e.Touches.Length == 1 && isDragging)
+        {
+            // Single finger: drag to pan
+            double deltaX = (e.Touches[0].ClientX - dragStartX) / 3.0 / zoomLevel;
+            double deltaY = (e.Touches[0].ClientY - dragStartY) / 3.0 / zoomLevel;
+            panX = panStartX + deltaX;
+            panY = panStartY + deltaY;
+            ClampPan();
+        }
+        else if (e.Touches.Length == 2 && lastPinchDistance > 0)
+        {
+            // Two fingers: pinch zoom
+            var dx = e.Touches[0].ClientX - e.Touches[1].ClientX;
+            var dy = e.Touches[0].ClientY - e.Touches[1].ClientY;
+            var currentDistance = Math.Sqrt(dx * dx + dy * dy);
+            var scale = currentDistance / lastPinchDistance;
+            zoomLevel = Math.Clamp(pinchZoomStart * scale, MinZoom, MaxZoom);
+            ClampPan();
+        }
+    }
+
+    private void OnTouchEnd(TouchEventArgs e)
+    {
+        if (e.Touches.Length < 2)
+        {
+            lastPinchDistance = 0;
+        }
+        if (e.Touches.Length == 0)
+        {
+            isDragging = false;
+        }
+    }
+
+    private void ToggleMobileSidebar()
+    {
+        showMobileSidebar = !showMobileSidebar;
+    }
+
+    private void CloseSidebarOrFullscreen()
+    {
+        if (showMobileSidebar)
+        {
+            showMobileSidebar = false;
+        }
+        else
+        {
+            ToggleFullscreen();
+        }
+    }
+
+    private void ClampPan()
+    {
+        // Limit panning based on zoom level
+        // At zoom 1.0, no panning allowed (map fits exactly)
+        // At higher zoom, allow panning but keep map edges visible
+        double maxPan = (zoomLevel - 1) * 50 / zoomLevel;
+        panX = Math.Clamp(panX, -maxPan, maxPan);
+        panY = Math.Clamp(panY, -maxPan, maxPan);
+    }
+
+    private void ShowWarningModal()
+    {
+        showWarningModal = true;
+    }
+
+    private void CloseWarningModal()
+    {
+        showWarningModal = false;
+    }
+
+    private async Task ConfirmRequestMap()
+    {
+        isRequestingMap = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync("/api/Dashboard/RequestMapData", null);
+            if (response.IsSuccessStatusCode)
+            {
+                // The map is already generated and stored by the time this returns (pulled
+                // over RCON), so it can be reloaded immediately.
+                showWarningModal = false;
+                await LoadMapData();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Error requesting map: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error requesting map: {ex.Message}");
+        }
+        finally
+        {
+            isRequestingMap = false;
+            StateHasChanged();
+        }
+    }
+}

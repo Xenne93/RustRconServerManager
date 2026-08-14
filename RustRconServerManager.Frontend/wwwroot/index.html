@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <meta name="theme-color" content="#f97316">
+    <meta name="color-scheme" content="dark">
+    <title>Dashboard - Rust RCON Server Manager</title>
+    <base href="/" />
+
+    <!-- External fonts load from CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
+
+    <link rel="stylesheet" href="/css/tailwind-output.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <link rel="icon" href="/favicon.png" type="image/png">
+</head>
+
+<body id="page-top" class="bg-[#0f0f17] text-slate-200">
+<div id="app">
+    <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+        <div class="tw-spinner" style="width: 40px; height: 40px;"></div>
+    </div>
+</div>
+
+<div id="blazor-error-ui" style="display: none; background: #1e293b; color: #f87171; padding: 1rem; text-align: center; position: fixed; bottom: 0; width: 100%; z-index: 9999;">
+    An unhandled error has occurred.
+    <a href="" class="text-orange-400 underline ml-2">Reload</a>
+    <a class="text-slate-400 ml-4 cursor-pointer" onclick="this.parentElement.style.display='none'">Dismiss</a>
+</div>
+
+
+<script src="/_framework/blazor.webassembly.js"></script>
+
+<!-- QR Code Library -->
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+<!-- Chart.js Library for Statistics -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/js/stats-chart.js"></script>
+
+<script>
+    // QR Code generation for 2FA
+    window.generateQRCode = function (text) {
+        const qrcodeElement = document.getElementById("qrcode");
+        if (qrcodeElement) {
+            qrcodeElement.innerHTML = '';
+            new QRCode(qrcodeElement, {
+                text: text,
+                width: 200,
+                height: 200,
+                colorDark: "#f97316",
+                colorLight: "#0f172a",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+    };
+
+    // Pure Blazor modals - no Bootstrap JS needed
+    // These are kept for backward compatibility during migration
+    window.ShowBootstrapModal = function (modalId) {
+        // Noop - modals are now pure Blazor components
+        console.log('[Migration] ShowBootstrapModal called for', modalId, '- use TwModal component instead');
+    };
+
+    window.HideBootstrapModal = function (modalId) {
+        // Noop - modals are now pure Blazor components
+        console.log('[Migration] HideBootstrapModal called for', modalId, '- use TwModal component instead');
+    };
+
+    // Tab activation - now handled by TwTabs component
+    window.activateTab = function (tabId) {
+        console.log('[Migration] activateTab called for', tabId, '- use TwTabs component instead');
+    };
+</script>
+</body>
+
+</html>

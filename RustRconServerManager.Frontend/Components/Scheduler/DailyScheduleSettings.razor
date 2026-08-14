@@ -1,0 +1,52 @@
+@using RustRconServerManager.Shared.Scheduler
+
+<div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4">
+    <h6 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Daily Execution Settings</h6>
+    <div class="grid grid-cols-2 gap-4">
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Hour (0-23)</label>
+            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                   min="0" max="23" @onchange="OnHourChange" value="@(ExecutionHour ?? 0)" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Minute (0-59)</label>
+            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                   min="0" max="59" @onchange="OnMinuteChange" value="@(ExecutionMinute ?? 0)" />
+        </div>
+    </div>
+    <div class="rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-3 py-2 text-xs mt-3">
+        <strong>Example:</strong> Hour 18, Minute 30 will execute at 18:30 (6:30 PM) every day
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int? ExecutionHour { get; set; }
+
+    [Parameter]
+    public int? ExecutionMinute { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> OnExecutionHourChange { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> OnExecutionMinuteChange { get; set; }
+
+    private async Task OnHourChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString() ?? "", out var value) && value >= 0 && value <= 23)
+        {
+            ExecutionHour = value;
+            await OnExecutionHourChange.InvokeAsync(value);
+        }
+    }
+
+    private async Task OnMinuteChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString() ?? "", out var value) && value >= 0 && value <= 59)
+        {
+            ExecutionMinute = value;
+            await OnExecutionMinuteChange.InvokeAsync(value);
+        }
+    }
+}

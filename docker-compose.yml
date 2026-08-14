@@ -1,0 +1,72 @@
+name: rustrconservermanager
+
+services:
+  app:
+    image: ghcr.io/xenne93/rustrconservermanager:${IMAGE_TAG:-latest}
+    pull_policy: always
+    # To build from source instead of pulling the published image, comment out
+    # the "image"/"pull_policy" lines above and uncomment the block below.
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - LC_ALL=en_US.UTF-8
+      - LANG=en_US.UTF-8
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5000
+      - ASPNETCORE_PATHBASE=${PATHBASE:-}
+      - ConnectionStrings__DefaultConnection=Server=mariadb;Port=3306;Database=${DB_NAME:-rustrconservermanager};User=${DB_USER:-rustrconservermanager};Password=${DB_PASSWORD};
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER:-rustrconservermanager}
+      - Jwt__Audience=${JWT_AUDIENCE:-rustrconservermanager}
+      - RconEncryption__Key=${RCON_ENCRYPTION_KEY}
+      - Smtp__Host=${SMTP_HOST:-}
+      - Smtp__Port=${SMTP_PORT:-587}
+      - Smtp__User=${SMTP_USER:-}
+      - Smtp__Password=${SMTP_PASSWORD:-}
+      - Smtp__From=${SMTP_FROM:-}
+      - SteamApi__ApiKey=${STEAM_API_KEY:-}
+      - ProxyCheck__ApiKey=${PROXYCHECK_API_KEY:-}
+      - ProxyCheck__HmacKey=${PROXYCHECK_HMAC_KEY:-}
+      - AUTO_UPDATE=${AUTO_UPDATE:-true}
+      - SKIP_AUTO_UPDATE=${SKIP_AUTO_UPDATE:-false}
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    volumes:
+      - app_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+      - MARIADB_DATABASE=${DB_NAME:-rustrconservermanager}
+      - MARIADB_USER=${DB_USER:-rustrconservermanager}
+      - MARIADB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  app_data:
+    driver: local
+  db_data:
+    driver: local

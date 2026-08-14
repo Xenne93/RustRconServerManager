@@ -1,0 +1,20 @@
+@using RustRconServerManager.Frontend.Components.UI
+
+<TwStatCard Title="Entities"
+            Value="@((EntityCount ?? 0).ToString("N0"))"
+            Subtitle="active objects"
+            Variant="default">
+    <Icon>
+        <i class="fas fa-microchip"></i>
+    </Icon>
+</TwStatCard>
+
+@code {
+    [Parameter] public int? EntityCount { get; set; }
+
+    public async Task Update(int? entitycount = 0)
+    {
+        EntityCount = entitycount;
+        StateHasChanged();
+    }
+}

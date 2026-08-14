@@ -1,0 +1,62 @@
+@using RustRconServerManager.Frontend.Services
+@inject NavigationManager NavigationManager
+@inject ServerStateService ServerStateService
+@implements IDisposable
+
+@if (ShouldShowBanner())
+{
+    <div class="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-900/20 p-4">
+        <div class="flex items-center gap-4">
+            <div class="tw-spinner border-amber-500 border-t-amber-300 shrink-0"></div>
+            <div class="flex-1">
+                <h6 class="text-amber-400 font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Server Offline
+                </h6>
+                <p class="text-slate-400 text-xs mt-1">
+                    The selected server is currently offline. You are viewing outdated data that is not being updated. Connection will be restored automatically...
+                </p>
+            </div>
+            <div class="shrink-0">
+                <span class="tw-badge-warning text-xs">
+                    <i class="fas fa-clock mr-1"></i>
+                    Retrying in @ServerStateService.RetryCountdown s
+                </span>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        ServerStateService.OnConnectionStatusChanged += HandleConnectionStatusChanged;
+
+        // Only start monitoring if a server is selected
+        var serverId = await ServerStateService.GetSelectedServerIdAsync();
+        if (serverId.HasValue && serverId.Value > 0)
+        {
+            ServerStateService.StartConnectionMonitoring();
+        }
+    }
+
+    private void HandleConnectionStatusChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private bool ShouldShowBanner()
+    {
+        if (!ServerStateService.HasServerSelected)
+            return false;
+        var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        if (currentPath.StartsWith("manageservers", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return ServerStateService.ShouldShowOfflineBanner;
+    }
+
+    public void Dispose()
+    {
+        ServerStateService.OnConnectionStatusChanged -= HandleConnectionStatusChanged;
+    }
+}

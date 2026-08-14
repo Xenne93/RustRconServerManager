@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <BlazorEnableDebugging>true</BlazorEnableDebugging>
+    <EmitDebugInformation>true</EmitDebugInformation>
+    <DebugType>portable</DebugType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorWebAssemblyEnableLinking>false</BlazorWebAssemblyEnableLinking> <!-- voorkomt dat je symbolen gestript worden -->
+
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Blazored.LocalStorage" Version="4.5.0" />
+    <PackageReference Include="Blazored.SessionStorage" Version="2.4.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="8.0.13" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.16" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.16" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RustRconServerManager.Shared.Configuration\RustRconServerManager.Shared.Configuration.csproj" />
+    <ProjectReference Include="..\RustRconServerManager.Shared\RustRconServerManager.Shared.csproj" />
+  </ItemGroup>
+
+  <!-- Tailwind CSS Build (optional - requires npm) -->
+  <Target Name="CheckNodeModules" BeforeTargets="BuildTailwindCSS">
+    <Message Importance="high" Text="Checking for node_modules..." />
+    <Exec Command="npm install" WorkingDirectory="$(ProjectDir)" Condition="!Exists('$(ProjectDir)node_modules')" IgnoreExitCode="true" ContinueOnError="true" />
+  </Target>
+
+  <Target Name="BuildTailwindCSS" BeforeTargets="Build">
+    <Message Importance="high" Text="Building Tailwind CSS..." />
+    <Exec Command="npm run build:css" WorkingDirectory="$(ProjectDir)" IgnoreExitCode="true" ContinueOnError="true" />
+  </Target>
+
+</Project>

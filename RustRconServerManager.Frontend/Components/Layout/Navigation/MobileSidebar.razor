@@ -1,0 +1,352 @@
+@using RustRconServerManager.Shared.ManageServers
+@using RustRconServerManager.Frontend.Services
+@inject NavigationManager Nav
+@inject NavigationHelper NavHelper
+@inject HttpClient Http
+@inject ServerStateService ServerState
+
+@implements IDisposable
+
+@* Mobile Sidebar - Animated slide-out *@
+@if (IsOpen)
+{
+    @* Backdrop *@
+    <div class="fixed inset-0 bg-black/50 z-40 lg:hidden" @onclick="Close"></div>
+
+    @* Sidebar *@
+    <aside class="fixed left-0 top-0 bottom-0 w-72 bg-[#0f0f17] border-r border-slate-800/50 z-50 lg:hidden animate-slide-in-left">
+        @* Header *@
+        <div class="flex items-center justify-between p-4 border-b border-slate-800/50">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                    <i class="fas fa-shield-alt text-white text-sm"></i>
+                </div>
+                <span class="text-lg font-bold text-white">
+                    Rust<span class="text-orange-500">Panel</span>
+                </span>
+            </div>
+            <button type="button" class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="Close">
+                <i class="fas fa-times text-lg"></i>
+            </button>
+        </div>
+
+        @* Navigation *@
+        <nav class="p-4 space-y-1">
+            @if (permissionsLoaded)
+            {
+                @foreach (var item in GetNavItems())
+                {
+                    if (CanAccessPage(item.Route))
+                    {
+                        var isActive = IsActive(item.Route);
+                        <a href="@NavHelper.GetUrl(item.Route)"
+                           class="@(isActive ? "tw-nav-link-active" : "tw-nav-link")"
+                           @onclick="Close">
+                            <i class="@item.Icon @(isActive ? "text-orange-400" : "") w-5 text-center"></i>
+                            @item.Label
+                        </a>
+                    }
+                }
+            }
+        </nav>
+
+        @* Mobile Server Selector — only shown when servers exist *@
+        @if (Servers?.Count > 0)
+        {
+        <div class="p-4 border-t border-slate-800/50 mt-auto">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 block">Server</span>
+            <button type="button" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:border-slate-600/50 transition-colors" @onclick="ToggleServerList">
+                <div class="flex items-center gap-2 min-w-0">
+                    <i class="fas fa-server text-orange-400 text-sm flex-shrink-0"></i>
+                    <span class="text-sm text-white font-medium truncate">
+                        @(isLoadingServers ? "Loading..." : CurrentServerName)
+                    </span>
+                    @if (!isLoadingServers && ActiveServerId.HasValue)
+                    {
+                        @if (ActiveServerIsConnected)
+                        {
+                            <span class="tw-badge-success text-[10px] flex-shrink-0">Online</span>
+                        }
+                        else
+                        {
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-medium flex-shrink-0">Offline</span>
+                        }
+                    }
+                </div>
+                <i class="fas fa-chevron-down text-xs text-slate-400 transition-transform @(serverListExpanded ? "rotate-180" : "")" ></i>
+            </button>
+
+            @if (serverListExpanded)
+            {
+                <div class="mt-2 rounded-lg bg-slate-800/80 border border-slate-700/50 overflow-hidden">
+                    @if (isLoadingServers)
+                    {
+                        <div class="px-3 py-4 text-center text-slate-500 text-sm">
+                            <i class="fas fa-spinner fa-spin mr-2"></i>Loading...
+                        </div>
+                    }
+                    else if (Servers?.Count > 0)
+                    {
+                        @foreach (var server in Servers)
+                        {
+                            var isActive = server.ServerId == ActiveServerId;
+                            <button type="button"
+                                    class="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-700/50 transition-colors @(isActive ? "bg-orange-500/10 border-l-2 border-orange-500" : "border-l-2 border-transparent")"
+                                    @onclick='async () => await SwitchServer(server.ServerId.GetValueOrDefault(), server.ServerName ?? "Unknown")'>
+                                <span class="text-sm @(isActive ? "text-orange-400 font-medium" : "text-slate-300") truncate">@server.ServerName</span>
+                                @if (server.IsConnected == true)
+                                {
+                                    <span class="tw-badge-success text-[10px] flex-shrink-0">Online</span>
+                                }
+                                else
+                                {
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-medium flex-shrink-0">Offline</span>
+                                }
+                            </button>
+                        }
+                    }
+                    else
+                    {
+                        <div class="px-3 py-4 text-center text-slate-500 text-sm">No servers configured</div>
+                    }
+                </div>
+            }
+        </div>
+        }
+    </aside>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private bool IsModerator = false;
+    private bool permissionsLoaded = false;
+    private HashSet<string> AllowedPages = new();
+
+    // Server selector state
+    private List<ManageServers_ServerListEntryDTO> Servers = new();
+    private int? ActiveServerId;
+    private string CurrentServerName = "Select Server";
+    private bool isLoadingServers = true;
+    private bool serverListExpanded = false;
+    private bool ActiveServerIsConnected => Servers?.FirstOrDefault(s => s.ServerId == ActiveServerId)?.IsConnected == true;
+
+    private record NavItem(string Route, string Label, string Icon);
+
+    private List<NavItem> GetNavItems()
+    {
+        // When no server is selected, only show Manage Servers
+        if (!ActiveServerId.HasValue || ActiveServerId.Value <= 0)
+        {
+            if (!IsModerator)
+                return new List<NavItem> { new("manage-servers", "Manage Servers", "fas fa-server") };
+            return new List<NavItem>();
+        }
+
+        var items = new List<NavItem>
+        {
+            new("dashboard", "Dashboard", "fas fa-chart-line"),
+            new("map", "Map", "fas fa-map"),
+            new("statistics", "Statistics", "fas fa-chart-bar"),
+            new("console", "Console", "fas fa-terminal"),
+            new("players", "Players", "fas fa-users"),
+            new("banlist", "Bans", "fas fa-ban"),
+            new("scheduler", "Scheduler", "fas fa-clock"),
+            new("triggers", "Triggers", "fas fa-bolt"),
+            new("server-actions", "Server Actions", "fas fa-sliders-h"),
+            new("server-management", "Server Management", "fas fa-cogs"),
+        };
+
+        if (!IsModerator)
+        {
+            items.Add(new("manage-servers", "Manage Servers", "fas fa-server"));
+        }
+
+        return items;
+    }
+
+    private bool CanAccessPage(string pageRoute)
+    {
+        if (!IsModerator) return true;
+        return AllowedPages.Contains(pageRoute);
+    }
+
+    private bool IsActive(string route)
+    {
+        string current = Nav.Uri.Replace(Nav.BaseUri, "/").Split('?')[0].ToLower();
+        string target = "/" + route.TrimStart('/');
+        if (!current.StartsWith("/")) current = "/" + current;
+        return current == target || (target == "/dashboard" && current == "/");
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        serverListExpanded = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private void ToggleServerList()
+    {
+        serverListExpanded = !serverListExpanded;
+    }
+
+    private async Task SwitchServer(int serverId, string serverName)
+    {
+        try
+        {
+            bool success = await ServerState.SetSelectedServerAsync(serverId, serverName);
+            if (success)
+            {
+                await Close();
+
+                // Stay on the current page instead of always redirecting to dashboard
+                var basePath = NavHelper.GetBasePath();
+                var fullUri = Nav.Uri;
+                var baseUri = Nav.BaseUri.TrimEnd('/');
+                var relativePath = fullUri.Substring(baseUri.Length);
+
+                if (!string.IsNullOrEmpty(basePath) && relativePath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    relativePath = relativePath.Substring(basePath.Length);
+                }
+
+                relativePath = relativePath.TrimStart('/').Split('?')[0];
+
+                if (string.IsNullOrEmpty(relativePath))
+                {
+                    relativePath = "dashboard";
+                }
+
+                NavHelper.NavigateTo(relativePath, true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MobileSidebar] Error switching server: {ex.Message}");
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        ServerState.OnServerChanged += OnServerStateChanged;
+        await LoadUserPermissions();
+        await LoadSelectedServerFromState();
+        await LoadServers();
+    }
+
+    private void OnServerStateChanged()
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadSelectedServerFromState();
+            await LoadServers();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadSelectedServerFromState()
+    {
+        try
+        {
+            await ServerState.LoadSelectedServerFromDatabaseAsync();
+            var serverId = await ServerState.GetSelectedServerIdAsync();
+            if (serverId.HasValue && serverId.Value > 0)
+            {
+                ActiveServerId = serverId.Value;
+            }
+            else
+            {
+                ActiveServerId = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MobileSidebar] Error loading selected server: {ex.Message}");
+        }
+    }
+
+    private async Task LoadServers()
+    {
+        try
+        {
+            isLoadingServers = true;
+            var serversList = await Http.GetFromJsonAsync<List<ManageServers_ServerListEntryDTO>>("/api/ManageServers/GetServerList");
+            if (serversList != null)
+            {
+                Servers = serversList;
+                var activeServer = Servers.FirstOrDefault(s => s.ServerId == ActiveServerId);
+                if (activeServer != null)
+                {
+                    CurrentServerName = activeServer.ServerName ?? "Unknown Server";
+                }
+                else if (Servers.Count > 0)
+                {
+                    var firstServer = Servers[0];
+                    var firstId = firstServer.ServerId.GetValueOrDefault();
+                    if (firstId > 0)
+                    {
+                        await ServerState.SetSelectedServerAsync(firstId, firstServer.ServerName ?? "Unknown Server");
+                        ActiveServerId = firstId;
+                        CurrentServerName = firstServer.ServerName ?? "Unknown Server";
+                    }
+                }
+                else
+                {
+                    CurrentServerName = "No Servers";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MobileSidebar] Error loading servers: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingServers = false;
+        }
+    }
+
+    private async Task LoadUserPermissions()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Account/BasicInfo");
+            if (response.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+            {
+                IsModerator = response.GetProperty("isModerator").GetBoolean();
+                if (IsModerator)
+                {
+                    var permissions = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Moderator/MyPagePermissions");
+                    if (permissions.ValueKind != System.Text.Json.JsonValueKind.Undefined &&
+                        permissions.TryGetProperty("allowedPages", out var allowedPagesElement))
+                    {
+                        AllowedPages = new HashSet<string>();
+                        foreach (var page in allowedPagesElement.EnumerateArray())
+                        {
+                            var pageRoute = page.GetString();
+                            if (!string.IsNullOrEmpty(pageRoute))
+                            {
+                                AllowedPages.Add(pageRoute);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MobileSidebar] Error loading permissions: {ex.Message}");
+        }
+        finally
+        {
+            permissionsLoaded = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        ServerState.OnServerChanged -= OnServerStateChanged;
+    }
+}

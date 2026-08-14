@@ -1,0 +1,568 @@
+@using Blazored.LocalStorage
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.SignalR
+@using Microsoft.AspNetCore.SignalR.Client
+@using RustRconServerManager.Shared.LiveChatHub
+@using System.Text.Json
+@using RustRconServerManager.Frontend.Services
+@inject ILocalStorageService LocalStorage
+@inject IJSRuntime JsRuntime
+@inject NavigationManager NavigationManager
+@inject NavigationHelper NavHelper
+@inject HttpClient Http
+
+<div class="tw-card" style="height: 450px; display: flex; flex-direction: column;">
+    @* Header *@
+    <div class="tw-card-header">
+        <div class="flex items-center gap-2">
+            <i class="fas fa-comments text-orange-400 text-sm"></i>
+            <span class="text-sm font-semibold text-white">Live Chat</span>
+            <div class="flex items-center gap-1 ml-2">
+                <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                <span class="text-xs text-slate-400">Live</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-1">
+            <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-white" title="Search Chat Messages" @onclick="OpenSearchModal">
+                <i class="fas fa-search text-xs"></i>
+            </button>
+        </div>
+    </div>
+
+    @* Chat Messages *@
+    <div class="flex-1 flex flex-col min-h-0 p-4">
+        <div @ref="chatEl"
+             class="flex-1 overflow-y-auto p-4 space-y-3 rounded-lg bg-slate-950/30"
+             style="min-height: 0;">
+
+            @if (isLoadingHistory)
+            {
+                <div class="text-center text-slate-500 mb-3">
+                    <small><i class="fas fa-spinner fa-spin mr-1"></i> Loading history...</small>
+                </div>
+            }
+            else if (hasReachedBeginning && messages.Count > 0)
+            {
+                <div class="text-center text-slate-500 mb-3">
+                    <small><i class="fas fa-flag-checkered mr-1"></i> Beginning of chat history</small>
+                </div>
+            }
+
+            @if (messages.Count == 0 && !isLoadingHistory)
+            {
+                <div class="flex items-center justify-center h-full text-slate-500 text-sm">
+                    No chat messages
+                </div>
+            }
+
+            @foreach (var m in messages)
+            {
+                var isTeam = m.Channel == "1";
+                <div class="flex gap-2 leading-relaxed hover:bg-slate-800/30 px-1 rounded items-baseline">
+                    <span class="text-slate-500 shrink-0 text-[10px]">@m.Timestamp.ToLocalTime().ToString("dd-MM HH:mm:ss")</span>
+                    <a href="@NavHelper.GetUrl($"inspect/{m.SteamId}")" class="font-semibold text-sm text-white shrink-0 no-underline hover:text-orange-400">@m.Username</a>
+                    <span class="@(isTeam ? "text-blue-400" : "text-emerald-400") text-[10px] shrink-0">[@(isTeam ? "Team" : "Global")]</span>
+                    <span class="text-sm text-slate-300 break-words">@m.Message</span>
+                </div>
+            }
+        </div>
+
+        @* Message Input *@
+        <div class="pt-4 flex-shrink-0">
+            <div class="flex items-center gap-2">
+                <input type="text"
+                       class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50"
+                       placeholder="Type a message..."
+                       @bind="input"
+                       @bind:event="oninput"
+                       @onkeypress="HandleKeyPress" />
+                <button class="tw-btn-primary px-4 py-2" @onclick="SendMessage">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Search Modal *@
+@if (showSearchModal)
+{
+    <div class="fixed inset-0 z-[1060]">
+        <div class="tw-modal-backdrop" @onclick="CloseSearchModal"></div>
+        <div class="tw-modal max-w-2xl">
+            <div class="tw-modal-header">
+                <h5 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <i class="fas fa-search text-orange-400"></i>Search Chat Messages
+                </h5>
+                <button type="button" class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white" @onclick="CloseSearchModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="tw-modal-body">
+                <div class="flex gap-2 mb-4">
+                    <input type="text" class="tw-input" placeholder="Search by message or player name..."
+                           @bind="searchQuery" @bind:event="oninput"
+                           @onkeypress="HandleSearchKeyPress" />
+                    <button class="tw-btn-primary whitespace-nowrap" @onclick="ExecuteSearch" disabled="@isSearching">
+                        @if (isSearching)
+                        {
+                            <span class="tw-spinner mr-1" style="width: 14px; height: 14px;"></span>
+                            <span>Searching...</span>
+                        }
+                        else
+                        {
+                            <span>Search</span>
+                        }
+                    </button>
+                </div>
+
+                @if (searchResults.Count > 0)
+                {
+                    <div class="mb-2 text-slate-400 text-xs">
+                        <i class="fas fa-info-circle mr-1"></i>Found @searchResults.Count result(s)@(hasMoreResults ? "+" : "")
+                    </div>
+                    <div class="max-h-96 overflow-y-auto rounded-lg bg-slate-950/30 p-3 space-y-3">
+                        @foreach (var m in searchResults)
+                        {
+                            <div class="flex items-start gap-2 hover:bg-slate-800/30 rounded-lg px-2 py-1.5">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500/30 to-amber-600/30 flex items-center justify-center shrink-0">
+                                    <span class="text-xs font-bold text-orange-300">
+                                        @(m.Username?.Length > 0 ? m.Username[0].ToString().ToUpper() : "?")
+                                    </span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <a href="@NavHelper.GetUrl($"inspect/{m.SteamId}")" class="font-semibold text-sm text-white no-underline hover:text-orange-400">
+                                            @HighlightSearchTerm(m.Username)
+                                        </a>
+                                        <span class="text-[10px] text-slate-500">
+                                            @m.Timestamp.ToLocalTime().ToString("dd-MM-yyyy HH:mm:ss")
+                                        </span>
+                                    </div>
+                                    <p class="text-sm text-slate-300 mt-0.5 break-words">
+                                        @HighlightSearchTerm(m.Message)
+                                    </p>
+                                </div>
+                            </div>
+                        }
+                        @if (hasMoreResults)
+                        {
+                            <div class="text-center mt-3">
+                                <button class="tw-btn-outline tw-btn-sm" @onclick="LoadMoreSearchResults" disabled="@isLoadingMore">
+                                    @if (isLoadingMore)
+                                    {
+                                        <span class="tw-spinner mr-1" style="width: 12px; height: 12px;"></span>
+                                        <span>Loading...</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-plus mr-1"></i>
+                                        <span>Load More Results</span>
+                                    }
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+                else if (hasSearched && !isSearching)
+                {
+                    <div class="text-center text-slate-500 py-8">
+                        <i class="fas fa-search text-2xl mb-2 block"></i>
+                        <p>No results found for "<strong class="text-white">@lastSearchQuery</strong>"</p>
+                    </div>
+                }
+                else if (!hasSearched)
+                {
+                    <div class="text-center text-slate-500 py-8">
+                        <i class="fas fa-comments text-2xl mb-2 block"></i>
+                        <p>Enter a search term to search through chat messages</p>
+                    </div>
+                }
+            </div>
+            <div class="tw-modal-footer">
+                <button type="button" class="tw-btn-secondary" @onclick="CloseSearchModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private HubConnection? hubConnection;
+    private readonly List<LiveChatHub_ChatMessageDto> messages = new();
+    private string input = string.Empty;
+
+    private ElementReference chatEl;
+    private bool _messageAppended;
+    private bool _jsBootstrapped;
+    private bool isLoadingHistory = false;
+    private int messagesLoadedCount = 0;
+    private int serverId = 0;
+    private bool hasReachedBeginning = false;
+
+    // Search state
+    private bool showSearchModal = false;
+    private string searchQuery = string.Empty;
+    private string lastSearchQuery = string.Empty;
+    private bool isSearching = false;
+    private bool isLoadingMore = false;
+    private bool hasSearched = false;
+    private bool hasMoreResults = false;
+    private int searchResultsLoaded = 0;
+    private const int SearchPageSize = 200;
+    private readonly List<LiveChatHub_ChatMessageDto> searchResults = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        serverId = await LocalStorage.GetItemAsync<int>("activeServerId");
+        await LoadPreviousMessages();
+        await InitializeChat();
+    }
+
+    private async Task LoadPreviousMessages()
+    {
+        if (serverId == 0) return;
+
+        try
+        {
+            isLoadingHistory = true;
+
+            var response = await Http.GetAsync($"/api/Chat/recent/{serverId}?count=50");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var loadedMessages = JsonSerializer.Deserialize<List<LiveChatHub_ChatMessageDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (loadedMessages != null && loadedMessages.Count > 0)
+                {
+                    messages.AddRange(loadedMessages);
+                    messagesLoadedCount = loadedMessages.Count;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading previous messages: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    [JSInvokable]
+    public async Task LoadMoreHistory()
+    {
+        if (serverId == 0 || isLoadingHistory || hasReachedBeginning) return;
+
+        try
+        {
+            isLoadingHistory = true;
+            await InvokeAsync(StateHasChanged);
+
+            var response = await Http.GetAsync($"/api/Chat/messages/{serverId}?skip={messagesLoadedCount}&take=200");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var loadedMessages = JsonSerializer.Deserialize<List<LiveChatHub_ChatMessageDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (loadedMessages == null || loadedMessages.Count == 0)
+                {
+                    hasReachedBeginning = true;
+                    isLoadingHistory = false;
+                    await InvokeAsync(StateHasChanged);
+                    return;
+                }
+
+                messages.InsertRange(0, loadedMessages);
+                messagesLoadedCount += loadedMessages.Count;
+
+                isLoadingHistory = false;
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                hasReachedBeginning = true;
+                isLoadingHistory = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ChatCard] Error loading more messages: {ex.Message}");
+            isLoadingHistory = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsBootstrapped)
+        {
+            _jsBootstrapped = true;
+            var dotnetHelper = DotNetObjectReference.Create(this);
+
+            await JsRuntime.InvokeVoidAsync("eval", @"
+                window.__chatScrollHandler = {
+                    dotnetHelper: null,
+                    el: null,
+                    autoScroll: true,
+                    loadingMore: false,
+                    lastLoadTime: 0,
+                    loadDebounceMs: 500,
+
+                    init: function(element, helper) {
+                        this.el = element;
+                        this.dotnetHelper = helper;
+                        if (!this.el) return;
+
+                        const self = this;
+                        const threshold = 20;
+                        const loadThreshold = 150;
+
+                        this.el.addEventListener('scroll', function() {
+                            const now = Date.now();
+                            const atBottom = self.el.scrollTop + self.el.clientHeight >= self.el.scrollHeight - threshold;
+                            self.autoScroll = atBottom;
+
+                            if (self.loadingMore || (now - self.lastLoadTime) < self.loadDebounceMs) {
+                                return;
+                            }
+
+                            if (self.el.scrollTop <= loadThreshold) {
+                                self.lastLoadTime = now;
+                                self.loadingMore = true;
+
+                                try {
+                                    self.dotnetHelper.invokeMethodAsync('LoadMoreHistory').then(() => {
+                                        self.loadingMore = false;
+                                    }).catch(err => {
+                                        self.loadingMore = false;
+                                    });
+                                } catch(e) {
+                                    self.loadingMore = false;
+                                }
+                            }
+                        }, { passive: true });
+
+                        const mo = new MutationObserver(() => {
+                            if (self.autoScroll) {
+                                self.el.scrollTop = self.el.scrollHeight;
+                            }
+                        });
+                        mo.observe(this.el, { childList: true, subtree: false });
+                        this.el.scrollTop = this.el.scrollHeight;
+                    },
+
+                    scrollToBottom: function() {
+                        if (!this.el) return;
+                        if (this.autoScroll) {
+                            this.el.scrollTop = this.el.scrollHeight;
+                        }
+                    }
+                };
+            ");
+
+            await JsRuntime.InvokeVoidAsync("__chatScrollHandler.init", chatEl, dotnetHelper);
+        }
+
+        if (_messageAppended)
+        {
+            _messageAppended = false;
+            await JsRuntime.InvokeVoidAsync("__chatScrollHandler.scrollToBottom");
+        }
+    }
+
+    private async Task InitializeChat()
+    {
+        var hubUrl = NavHelper.GetUrl("livechat");
+        var absoluteHubUrl = new Uri(new Uri(NavigationManager.Uri), hubUrl).ToString();
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(absoluteHubUrl)
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<LiveChatHub_ChatMessageDto>("ReceivedChatMessage", (dto) =>
+        {
+            messages.Add(dto);
+            _messageAppended = true;
+            InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.Reconnecting += (ex) =>
+        {
+            return Task.CompletedTask;
+        };
+
+        hubConnection.Reconnected += async (newConnId) =>
+        {
+            try
+            {
+                await hubConnection.SendAsync("RefreshServerSubscription");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[ChatCard] Could not restore subscription: {e.Message}");
+            }
+        };
+
+        hubConnection.Closed += (ex) =>
+        {
+            return Task.CompletedTask;
+        };
+
+        await hubConnection.StartAsync();
+        await hubConnection.SendAsync("RefreshServerSubscription");
+    }
+
+    private async Task SendMessage()
+    {
+        if (hubConnection is null || hubConnection.State != HubConnectionState.Connected) return;
+        var trimmed = input?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return;
+
+        try
+        {
+            await hubConnection.InvokeAsync("SendMessageToCurrentServer", trimmed);
+            input = string.Empty;
+        }
+        catch (HubException hex)
+        {
+            messages.Add(new LiveChatHub_ChatMessageDto { Username = "System", Message = $"Hub error: {hex.Message}", Timestamp = DateTime.UtcNow });
+            _messageAppended = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            messages.Add(new LiveChatHub_ChatMessageDto { Username = "System", Message = $"Error: {ex.GetType().Name}: {ex.Message}", Timestamp = DateTime.UtcNow });
+            _messageAppended = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await hubConnection!.InvokeAsync("Ping");
+            await SendMessage();
+        }
+    }
+
+    private void OpenSearchModal()
+    {
+        showSearchModal = true;
+        searchQuery = string.Empty;
+        searchResults.Clear();
+        hasSearched = false;
+    }
+
+    private void CloseSearchModal()
+    {
+        showSearchModal = false;
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ExecuteSearch();
+    }
+
+    private async Task ExecuteSearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery) || serverId == 0) return;
+
+        isSearching = true;
+        hasSearched = true;
+        lastSearchQuery = searchQuery;
+        searchResults.Clear();
+        searchResultsLoaded = 0;
+        hasMoreResults = false;
+        StateHasChanged();
+
+        try
+        {
+            var encodedQuery = Uri.EscapeDataString(searchQuery);
+            var response = await Http.GetAsync($"/api/Chat/search/{serverId}?query={encodedQuery}&skip=0&take={SearchPageSize}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var results = JsonSerializer.Deserialize<List<LiveChatHub_ChatMessageDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (results != null)
+                {
+                    searchResults.AddRange(results);
+                    searchResultsLoaded = results.Count;
+                    hasMoreResults = results.Count >= SearchPageSize;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching chat: {ex.Message}");
+        }
+        finally
+        {
+            isSearching = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMoreSearchResults()
+    {
+        if (string.IsNullOrWhiteSpace(lastSearchQuery) || serverId == 0 || isLoadingMore) return;
+
+        isLoadingMore = true;
+        StateHasChanged();
+
+        try
+        {
+            var encodedQuery = Uri.EscapeDataString(lastSearchQuery);
+            var response = await Http.GetAsync($"/api/Chat/search/{serverId}?query={encodedQuery}&skip={searchResultsLoaded}&take={SearchPageSize}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var results = JsonSerializer.Deserialize<List<LiveChatHub_ChatMessageDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (results != null && results.Count > 0)
+                {
+                    searchResults.AddRange(results);
+                    searchResultsLoaded += results.Count;
+                    hasMoreResults = results.Count >= SearchPageSize;
+                }
+                else
+                {
+                    hasMoreResults = false;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading more search results: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingMore = false;
+            StateHasChanged();
+        }
+    }
+
+    private MarkupString HighlightSearchTerm(string text)
+    {
+        if (string.IsNullOrWhiteSpace(lastSearchQuery) || string.IsNullOrWhiteSpace(text))
+            return new MarkupString(System.Web.HttpUtility.HtmlEncode(text));
+
+        var escapedText = System.Web.HttpUtility.HtmlEncode(text);
+        var escapedQuery = System.Web.HttpUtility.HtmlEncode(lastSearchQuery);
+
+        var pattern = System.Text.RegularExpressions.Regex.Escape(escapedQuery);
+        var highlighted = System.Text.RegularExpressions.Regex.Replace(
+            escapedText,
+            pattern,
+            match => $"<mark class=\"bg-orange-500/30 text-orange-200 px-0.5 rounded\">{match.Value}</mark>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+        );
+
+        return new MarkupString(highlighted);
+    }
+}

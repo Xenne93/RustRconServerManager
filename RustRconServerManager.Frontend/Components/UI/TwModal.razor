@@ -1,0 +1,88 @@
+@* Tailwind Modal Component - Pure Blazor/CSS (no Bootstrap JS) *@
+
+@if (IsOpen)
+{
+    <div class="fixed inset-0 z-40" @onclick="HandleBackdropClick">
+        @* Backdrop *@
+        <div class="tw-modal-backdrop"></div>
+
+        @* Modal *@
+        <div class="tw-modal @GetSizeClass()" @onclick:stopPropagation="true">
+            @* Header *@
+            @if (ShowHeader)
+            {
+                <div class="tw-modal-header">
+                    <h3 class="text-lg font-semibold text-white">@Title</h3>
+                    @if (ShowCloseButton)
+                    {
+                        <button type="button" class="tw-btn-ghost tw-btn-icon" @onclick="Close">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    }
+                </div>
+            }
+
+            @* Body *@
+            <div class="tw-modal-body @(MaxHeight != null ? "overflow-y-auto" : "")" style="@(MaxHeight != null ? $"max-height: {MaxHeight};" : "")">
+                @ChildContent
+            </div>
+
+            @* Footer *@
+            @if (FooterContent != null)
+            {
+                <div class="tw-modal-footer">
+                    @FooterContent
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? FooterContent { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public bool IsOpen { get; set; } = false;
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public bool ShowHeader { get; set; } = true;
+    [Parameter] public bool ShowCloseButton { get; set; } = true;
+    [Parameter] public bool CloseOnBackdropClick { get; set; } = true;
+    [Parameter] public string Size { get; set; } = "default";
+    [Parameter] public string? MaxHeight { get; set; }
+
+    public async Task Open()
+    {
+        IsOpen = true;
+        await IsOpenChanged.InvokeAsync(true);
+    }
+
+    public async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task HandleBackdropClick()
+    {
+        if (CloseOnBackdropClick)
+        {
+            await Close();
+        }
+    }
+
+    private string GetSizeClass()
+    {
+        return Size switch
+        {
+            "sm" => "max-w-sm",
+            "lg" => "max-w-2xl",
+            "xl" => "max-w-4xl",
+            "full" => "max-w-[90vw]",
+            _ => "max-w-lg"
+        };
+    }
+}

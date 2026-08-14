@@ -1,0 +1,490 @@
+@using RustRconServerManager.Frontend.Components.UI
+@using RustRconServerManager.Shared.Moderator
+@using Microsoft.JSInterop
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<TwCard HeaderTitle="Moderator Accounts" HeaderIcon="fas fa-users-cog">
+    <HeaderActions>
+        <button class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-1.5 px-3 rounded-lg transition-colors text-sm" @onclick="OpenCreateModal">
+            <i class="fa-solid fa-plus mr-1"></i>Add Moderator
+        </button>
+    </HeaderActions>
+    <ChildContent>
+        @if (moderators == null)
+        {
+            <div class="text-center py-6">
+                <i class="fas fa-spinner fa-spin text-slate-400 text-lg"></i>
+                <p class="text-slate-400 mt-2 text-sm">Loading moderators...</p>
+            </div>
+        }
+        else if (!moderators.Any())
+        {
+            <div class="text-center py-8">
+                <i class="fas fa-users text-4xl text-slate-600 mb-4"></i>
+                <p class="text-slate-400 mb-4">No moderators configured yet.</p>
+                <button class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors" @onclick="OpenCreateModal">
+                    <i class="fas fa-plus mr-2"></i>Add Moderator
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="overflow-x-auto -mx-4 -mb-4">
+                <table class="tw-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Display Name</th>
+                            <th>Status</th>
+                            <th>Servers</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var moderator in moderators)
+                        {
+                            <tr class="border-b border-slate-700/30 hover:bg-slate-800/30 transition-colors">
+                                <td class="font-medium text-white">@moderator.Username</td>
+                                <td class="text-slate-300">@(moderator.DisplayName ?? "-")</td>
+                                <td>
+                                    @if (moderator.IsActive)
+                                    {
+                                        <TwBadge Variant="success">Active</TwBadge>
+                                    }
+                                    else
+                                    {
+                                        <TwBadge Variant="default">Inactive</TwBadge>
+                                    }
+                                </td>
+                                <td class="text-slate-300">@moderator.ServerPermissions.Count server(s)</td>
+                                <td class="text-slate-400 text-sm">@(moderator.LastLoginAt?.ToLocalTime().ToString("dd-MM-yyyy HH:mm") ?? "Never")</td>
+                                <td>
+                                    <button class="px-2 py-1 text-xs border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 rounded transition-colors mr-1" @onclick="() => OpenEditModal(moderator)">
+                                        <i class="fa-solid fa-edit"></i>
+                                    </button>
+                                    <button class="px-2 py-1 text-xs border border-red-500/50 text-red-400 hover:bg-red-500/10 rounded transition-colors" @onclick="() => DeleteModerator(moderator.Id)">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </ChildContent>
+</TwCard>
+
+<!-- Create/Edit Modal -->
+<TwModal @bind-IsOpen="showModal" Title="@(isEditMode ? "Edit Moderator" : "Create Moderator")" Size="lg">
+    <ChildContent>
+    <div class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Username @(isEditMode ? "(read-only)" : "")</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed" @bind="currentModerator.Username" disabled="@isEditMode" />
+        </div>
+
+        @if (!isEditMode)
+        {
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                <input type="password" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="currentPassword" />
+            </div>
+        }
+        else
+        {
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">New Password</label>
+                <input type="password" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="currentPassword" placeholder="Leave empty to keep current" />
+            </div>
+        }
+
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Display Name</label>
+            <input class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="currentModerator.DisplayName" />
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Email</label>
+            <input type="email" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500" @bind="currentModerator.Email" />
+        </div>
+
+        @if (isEditMode)
+        {
+            <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" @bind="currentModerator.IsActive" class="sr-only peer" />
+                    <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+                <span class="text-sm text-slate-300">Account is active</span>
+            </div>
+        }
+
+        <div>
+            <label class="block text-sm font-semibold text-slate-300 mb-2">Server Permissions</label>
+            @if (availableServers == null)
+            {
+                <p class="text-sm text-slate-400"><i class="fas fa-spinner fa-spin mr-1"></i>Loading servers...</p>
+            }
+            else if (!availableServers.Any())
+            {
+                <p class="text-sm text-slate-500">No servers available. Add servers first in Manage Servers.</p>
+            }
+            else
+            {
+                <div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-3 max-h-[200px] overflow-y-auto space-y-2">
+                    @foreach (var server in availableServers)
+                    {
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                                   class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500/50 focus:ring-offset-0"
+                                   checked="@selectedServerIds.Contains(server.ServerId)"
+                                   @onchange="e => ToggleServer(server.ServerId, (bool)e.Value!)" />
+                            <span class="text-sm text-slate-300">@server.ServerName <span class="text-slate-500">(@server.ServerAddress:@server.RconPort)</span></span>
+                        </label>
+                    }
+                </div>
+            }
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-slate-300 mb-2">Page Access Permissions</label>
+            @if (availablePages == null)
+            {
+                <p class="text-sm text-slate-400"><i class="fas fa-spinner fa-spin mr-1"></i>Loading pages...</p>
+            }
+            else
+            {
+                <div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-3 max-h-[250px] overflow-y-auto space-y-2">
+                    <label class="flex items-center gap-2 cursor-pointer pb-2 border-b border-slate-700/30">
+                        <input type="checkbox"
+                               class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500/50 focus:ring-offset-0"
+                               checked="@(selectedPageRoutes.Count == availablePages.Count)"
+                               @onchange="ToggleAllPages" />
+                        <span class="text-sm font-semibold text-white">Select All Pages</span>
+                    </label>
+                    @foreach (var pg in availablePages)
+                    {
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="checkbox"
+                                   class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500/50 focus:ring-offset-0 mt-0.5"
+                                   checked="@selectedPageRoutes.Contains(pg.Route)"
+                                   @onchange="e => TogglePage(pg.Route, (bool)e.Value!)" />
+                            <div>
+                                <span class="text-sm font-medium text-white">@pg.DisplayName</span>
+                                <p class="text-xs text-slate-500">@pg.Description</p>
+                            </div>
+                        </label>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="flex items-start gap-3 rounded-lg bg-red-500/5 border border-red-500/20 px-4 py-3">
+                <i class="fas fa-exclamation-circle text-red-400 mt-0.5"></i>
+                <p class="text-sm text-red-400">@errorMessage</p>
+            </div>
+        }
+    </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2 w-full">
+            <button class="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors" @onclick="CloseModal">Cancel</button>
+            <button class="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors" @onclick="SaveModerator">
+                @(isEditMode ? "Update" : "Create")
+            </button>
+        </div>
+    </FooterContent>
+</TwModal>
+
+@code {
+    private List<Moderator_ListItemDTO>? moderators;
+    private List<ServerInfo>? availableServers;
+    private List<Moderator_AvailablePageDTO>? availablePages;
+    private bool showModal = false;
+    private bool isEditMode = false;
+    private ModeratorFormData currentModerator = new();
+    private string currentPassword = string.Empty;
+    private HashSet<int> selectedServerIds = new();
+    private HashSet<string> selectedPageRoutes = new();
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadModerators();
+        await LoadServers();
+        await LoadAvailablePages();
+    }
+
+    private async Task LoadModerators()
+    {
+        try
+        {
+            moderators = await Http.GetFromJsonAsync<List<Moderator_ListItemDTO>>("/api/Moderator/List");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading moderators: {ex.Message}");
+        }
+    }
+
+    private async Task LoadServers()
+    {
+        try
+        {
+            availableServers = await Http.GetFromJsonAsync<List<ServerInfo>>("/api/ManageServers/GetServerList");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading servers: {ex.Message}");
+        }
+    }
+
+    private async Task LoadAvailablePages()
+    {
+        try
+        {
+            availablePages = await Http.GetFromJsonAsync<List<Moderator_AvailablePageDTO>>("/api/Moderator/AvailablePages");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading available pages: {ex.Message}");
+        }
+    }
+
+    private Task OpenCreateModal()
+    {
+        isEditMode = false;
+        currentModerator = new ModeratorFormData();
+        currentPassword = string.Empty;
+        selectedServerIds.Clear();
+        selectedPageRoutes.Clear();
+        errorMessage = string.Empty;
+        showModal = true;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task OpenEditModal(Moderator_ListItemDTO moderator)
+    {
+        isEditMode = true;
+        currentModerator = new ModeratorFormData
+        {
+            Id = moderator.Id,
+            Username = moderator.Username,
+            DisplayName = moderator.DisplayName,
+            Email = moderator.Email,
+            IsActive = moderator.IsActive
+        };
+        currentPassword = string.Empty;
+        selectedServerIds = moderator.ServerPermissions.Select(sp => sp.ServerId).ToHashSet();
+
+        // Load page permissions for this moderator
+        await LoadModeratorPagePermissions(moderator.Id);
+
+        errorMessage = string.Empty;
+        showModal = true;
+        StateHasChanged();
+    }
+
+    private async Task LoadModeratorPagePermissions(string userId)
+    {
+        try
+        {
+            var permissions = await Http.GetFromJsonAsync<Moderator_PagePermissionsResponseDTO>($"/api/Moderator/PagePermissions/{userId}");
+
+            if (permissions != null)
+            {
+                selectedPageRoutes = permissions.AllowedPages.ToHashSet();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading moderator page permissions: {ex.Message}");
+            selectedPageRoutes.Clear();
+        }
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        errorMessage = string.Empty;
+    }
+
+    private void ToggleServer(int serverId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            selectedServerIds.Add(serverId);
+        }
+        else
+        {
+            selectedServerIds.Remove(serverId);
+        }
+    }
+
+    private void TogglePage(string pageRoute, bool isChecked)
+    {
+        if (isChecked)
+        {
+            selectedPageRoutes.Add(pageRoute);
+        }
+        else
+        {
+            selectedPageRoutes.Remove(pageRoute);
+        }
+    }
+
+    private void ToggleAllPages(ChangeEventArgs e)
+    {
+        bool isChecked = (bool)e.Value!;
+
+        if (isChecked)
+        {
+            // Select all pages
+            selectedPageRoutes = availablePages?.Select(p => p.Route).ToHashSet() ?? new HashSet<string>();
+        }
+        else
+        {
+            // Deselect all pages
+            selectedPageRoutes.Clear();
+        }
+    }
+
+    private async Task SaveModerator()
+    {
+        errorMessage = string.Empty;
+
+        try
+        {
+
+            string moderatorId = currentModerator.Id;
+
+            if (isEditMode)
+            {
+                // Update existing moderator
+                var updateDto = new Moderator_UpdateDTO
+                {
+                    Id = currentModerator.Id,
+                    DisplayName = currentModerator.DisplayName,
+                    Email = currentModerator.Email,
+                    IsActive = currentModerator.IsActive,
+                    ServerIds = selectedServerIds.ToList()
+                };
+
+                var response = await Http.PutAsJsonAsync($"/api/Moderator/Update/{currentModerator.Id}", updateDto);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    errorMessage = await response.Content.ReadAsStringAsync();
+                    return;
+                }
+
+                // Change password if provided
+                if (!string.IsNullOrEmpty(currentPassword))
+                {
+                    var passwordDto = new Moderator_ChangePasswordDTO
+                    {
+                        Id = currentModerator.Id,
+                        NewPassword = currentPassword
+                    };
+
+                    await Http.PutAsJsonAsync($"/api/Moderator/ChangePassword/{currentModerator.Id}", passwordDto);
+                }
+            }
+            else
+            {
+                // Create new moderator
+                if (string.IsNullOrEmpty(currentPassword))
+                {
+                    errorMessage = "Password is required for new moderators.";
+                    return;
+                }
+
+                var createDto = new Moderator_CreateDTO
+                {
+                    Username = currentModerator.Username,
+                    Password = currentPassword,
+                    DisplayName = currentModerator.DisplayName,
+                    Email = currentModerator.Email,
+                    ServerIds = selectedServerIds.ToList()
+                };
+
+                var response = await Http.PostAsJsonAsync("/api/Moderator/Create", createDto);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    errorMessage = await response.Content.ReadAsStringAsync();
+                    return;
+                }
+
+                // Get the created moderator's ID from the response
+                var createdModerator = await response.Content.ReadFromJsonAsync<Moderator_ListItemDTO>();
+                if (createdModerator != null)
+                {
+                    moderatorId = createdModerator.Id;
+                }
+            }
+
+            // Save page permissions for both create and update
+            var pagePermissionsDto = new Moderator_SetPagePermissionsDTO
+            {
+                UserId = moderatorId,
+                PageRoutes = selectedPageRoutes.ToList()
+            };
+
+            await Http.PostAsJsonAsync("/api/Moderator/PagePermissions", pagePermissionsDto);
+
+            await LoadModerators();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteModerator(string moderatorId)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this moderator?"))
+        {
+            return;
+        }
+
+        try
+        {
+
+            var response = await Http.DeleteAsync($"/api/Moderator/Delete/{moderatorId}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadModerators();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting moderator: {ex.Message}");
+        }
+    }
+
+    private class ModeratorFormData
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Username { get; set; } = string.Empty;
+        public string? DisplayName { get; set; }
+        public string? Email { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    private class ServerInfo
+    {
+        public int ServerId { get; set; }
+        public string ServerName { get; set; } = string.Empty;
+        public string ServerAddress { get; set; } = string.Empty;
+        public int RconPort { get; set; }
+    }
+}

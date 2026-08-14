@@ -1,0 +1,196 @@
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<div class="tw-card">
+    <div class="tw-card-header">
+        <div class="flex items-center gap-2">
+            <i class="@IconClass @IconColorClass text-sm"></i>
+            <span class="text-sm font-semibold text-white">@Title</span>
+        </div>
+        @if (!isLoading && statsData != null && statsData.Any())
+        {
+            <div class="flex items-center gap-4">
+                <div class="text-right">
+                    <p class="text-[10px] text-slate-500 uppercase">Avg</p>
+                    <p class="text-sm font-semibold text-white">@FormatSummary(averageValue)</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] text-slate-500 uppercase">Peak</p>
+                    <p class="text-sm font-semibold text-emerald-400">@FormatSummary(maxValue)</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] text-slate-500 uppercase">@MinLabel</p>
+                    <p class="text-sm font-semibold text-amber-400">@FormatSummary(minValue)</p>
+                </div>
+            </div>
+        }
+    </div>
+    <div class="tw-card-body">
+        <div class="mb-4">
+            <label class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 block">Time Range</label>
+            <input type="range"
+                   class="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-slate-700 @AccentSliderClass"
+                   min="0"
+                   max="3"
+                   step="1"
+                   @bind="timeRangeIndex"
+                   @bind:event="oninput"
+                   @onchange="OnTimeRangeChanged">
+            <div class="flex justify-between text-xs text-slate-500 mt-1">
+                <span class="@(timeRangeIndex == 0 ? $"font-bold {ActiveTabColorClass}" : "")">Hour</span>
+                <span class="@(timeRangeIndex == 1 ? $"font-bold {ActiveTabColorClass}" : "")">Day</span>
+                <span class="@(timeRangeIndex == 2 ? $"font-bold {ActiveTabColorClass}" : "")">Week</span>
+                <span class="@(timeRangeIndex == 3 ? $"font-bold {ActiveTabColorClass}" : "")">Month</span>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="text-center py-8">
+                <div class="tw-spinner mx-auto mb-3"></div>
+                <p class="text-slate-500 text-sm">Loading @LoadingLabel data...</p>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
+                <i class="fas fa-exclamation-triangle mr-2"></i>@errorMessage
+            </div>
+        }
+        else if (statsData == null || !statsData.Any())
+        {
+            <div class="rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 text-sm">
+                <i class="fas fa-info-circle mr-2"></i>No @LoadingLabel data available for this time range.
+            </div>
+        }
+        else
+        {
+            <div style="height: 250px;">
+                <canvas id="@ChartId"></canvas>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string IconClass { get; set; } = "";
+    [Parameter, EditorRequired] public string IconColorClass { get; set; } = "";
+    [Parameter, EditorRequired] public string AccentSliderClass { get; set; } = "";
+    [Parameter, EditorRequired] public string ActiveTabColorClass { get; set; } = "";
+    [Parameter, EditorRequired] public string StatEndpoint { get; set; } = "";
+    [Parameter, EditorRequired] public string ChartId { get; set; } = "";
+    [Parameter, EditorRequired] public string ChartLabel { get; set; } = "";
+    [Parameter, EditorRequired] public string BorderColor { get; set; } = "";
+    [Parameter, EditorRequired] public string BackgroundColor { get; set; } = "";
+    [Parameter] public string ChartUnit { get; set; } = "";
+    [Parameter] public string SummaryUnitSuffix { get; set; } = "";
+    [Parameter] public int Decimals { get; set; } = 1;
+    [Parameter] public int? TickStepSize { get; set; }
+    [Parameter] public string MinLabel { get; set; } = "Min";
+    [Parameter, EditorRequired] public string LoadingLabel { get; set; } = "";
+
+    private int timeRangeIndex = 0;
+    private static readonly string[] timeRanges = { "hour", "day", "week", "month" };
+    private bool isLoading = true;
+    private string? errorMessage;
+    private List<StatsDataPoint>? statsData;
+    private double averageValue = 0;
+    private double minValue = 0;
+    private double maxValue = 0;
+
+    private class StatsDataPoint
+    {
+        public DateTime timestamp { get; set; }
+        public string value { get; set; } = "0";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatsData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!isLoading && statsData != null && statsData.Any())
+        {
+            await RenderChart();
+        }
+    }
+
+    private async Task OnTimeRangeChanged()
+    {
+        await LoadStatsData();
+    }
+
+    private string FormatSummary(double value) =>
+        Math.Round(value, Decimals).ToString("F" + Decimals, System.Globalization.CultureInfo.InvariantCulture) + SummaryUnitSuffix;
+
+    private async Task LoadStatsData()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            StateHasChanged();
+
+            var timeRange = timeRanges[timeRangeIndex];
+            var response = await Http.GetAsync($"/api/Stats/{StatEndpoint}/{timeRange}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                statsData = await response.Content.ReadFromJsonAsync<List<StatsDataPoint>>();
+
+                if (statsData != null && statsData.Any())
+                {
+                    var values = statsData.Select(s => double.TryParse(s.value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 0).ToList();
+                    averageValue = values.Average();
+                    minValue = values.Min();
+                    maxValue = values.Max();
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to load {LoadingLabel} stats: {errorContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading {LoadingLabel} stats: {ex.Message}";
+            Console.WriteLine($"Error in LoadStatsData ({ChartId}): {ex}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RenderChart()
+    {
+        if (statsData == null || !statsData.Any()) return;
+
+        var labels = statsData.Select(s => s.timestamp.ToLocalTime().ToString("dd-MM HH:mm")).ToArray();
+        var values = statsData.Select(s => double.TryParse(s.value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 0).ToArray();
+
+        var options = new
+        {
+            label = ChartLabel,
+            borderColor = BorderColor,
+            backgroundColor = BackgroundColor,
+            unit = ChartUnit,
+            decimals = Decimals,
+            stepSize = TickStepSize
+        };
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("renderStatsChart", ChartId, labels, values, options);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error rendering chart ({ChartId}): {ex.Message}");
+        }
+    }
+}

@@ -1,0 +1,322 @@
+@using RustRconServerManager.Frontend.Components.UI
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<TwModal @bind-IsOpen="IsModalOpen" Title="@(IsEditMode ? "Edit Trigger" : "Create New Trigger")" Size="lg" MaxHeight="70vh">
+    <ChildContent>
+    <div class="space-y-4">
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
+                @ErrorMessage
+            </div>
+        }
+
+        <!-- Name -->
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Trigger Name <span class="text-red-400">*</span></label>
+            <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                   @bind="FormData.Name" placeholder="e.g., Welcome Message" />
+        </div>
+
+        <!-- Description -->
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Description</label>
+            <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                   @bind="FormData.Description" placeholder="Optional description" />
+        </div>
+
+        <!-- Event Type -->
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Event Type <span class="text-red-400">*</span></label>
+            <select class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                    @bind="FormData.TriggerEvent" @bind:after="OnEventTypeChanged">
+                <option value="">-- Select Event --</option>
+                <option value="PlayerJoin">Player Join</option>
+                <option value="PlayerLeave">Player Leave</option>
+                <option value="PlayerKill">Player Kill</option>
+                <option value="PlayerDeath">Player Death</option>
+                <option value="ChatMessage">Chat Message</option>
+            </select>
+        </div>
+
+        <!-- Chat Condition (only for ChatMessage) -->
+        @if (FormData.TriggerEvent == "ChatMessage")
+        {
+            <div class="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4">
+                <h6 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Chat Message Condition</h6>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Condition Type</label>
+                        <select class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                @bind="FormData.ChatConditionType">
+                            <option value="">Any message</option>
+                            <option value="Contains">Message contains</option>
+                            <option value="BeginsWith">Message begins with</option>
+                            <option value="EndsWith">Message ends with</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Text to match</label>
+                        <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                               @bind="FormData.ChatConditionValue"
+                               placeholder="e.g., !help"
+                               disabled="@(string.IsNullOrEmpty(FormData.ChatConditionType))" />
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Action Type -->
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Action Type <span class="text-red-400">*</span></label>
+            <select class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                    @bind="FormData.ActionType" @bind:after="OnActionTypeChanged">
+                <option value="">-- Select Action --</option>
+                <option value="SendServerMessage">Send Server Message</option>
+                <option value="CustomCommand">Custom RCON Command</option>
+                <option value="DiscordWebhook">Discord Webhook</option>
+                <option value="AppNotification">App Notification</option>
+            </select>
+        </div>
+
+        <!-- Action Value -->
+        @if (!string.IsNullOrEmpty(FormData.ActionType))
+        {
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">
+                    @(FormData.ActionType switch {
+                        "SendServerMessage" => "Message",
+                        "DiscordWebhook" => "Message",
+                        "AppNotification" => "Notification Message",
+                        _ => "Command"
+                    })
+                    <span class="text-red-400">*</span>
+                </label>
+                <textarea class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                          rows="3" @bind="FormData.ActionValue"
+                          placeholder="@GetActionPlaceholder()"></textarea>
+                <p class="text-xs text-slate-500 mt-1">
+                    Variables:
+                    <code class="text-orange-400/80">{player}</code>,
+                    <code class="text-orange-400/80">{steamid}</code>,
+                    @if (FormData.TriggerEvent == "PlayerKill" || FormData.TriggerEvent == "PlayerDeath")
+                    {
+                        <text><code class="text-orange-400/80">{killer}</code>, <code class="text-orange-400/80">{victim}</code>, </text>
+                    }
+                    @if (FormData.TriggerEvent == "ChatMessage")
+                    {
+                        <text><code class="text-orange-400/80">{message}</code>, <code class="text-orange-400/80">{channel}</code>, </text>
+                    }
+                    <code class="text-orange-400/80">{playerCount}</code>,
+                    <code class="text-orange-400/80">{framerate}</code>,
+                    <code class="text-orange-400/80">{memory}</code>,
+                    <code class="text-orange-400/80">{rcon.xxx}</code>
+                </p>
+            </div>
+        }
+
+        <!-- Webhook URL (only for DiscordWebhook) -->
+        @if (FormData.ActionType == "DiscordWebhook")
+        {
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Discord Webhook URL <span class="text-red-400">*</span></label>
+                <input type="url" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                       @bind="FormData.WebhookUrl" placeholder="https://discord.com/api/webhooks/..." />
+                <p class="text-xs text-slate-500 mt-1">Paste the webhook URL from your Discord channel settings</p>
+            </div>
+        }
+
+        <!-- Delay -->
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Delay (seconds)</label>
+            <input type="number" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                   @bind="FormData.DelaySeconds" min="0" placeholder="0 for instant" />
+            <p class="text-xs text-slate-500 mt-1">Optional delay before executing the action</p>
+        </div>
+
+        <!-- Active Toggle -->
+        <div class="flex items-center gap-3">
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" @bind="FormData.IsActive" class="sr-only peer" />
+                <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+            </label>
+            <span class="text-sm text-slate-300">Active <span class="text-slate-500">(trigger will execute when event occurs)</span></span>
+        </div>
+    </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2">
+            <button type="button" class="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors" @onclick="CloseModal">
+                Cancel
+            </button>
+            <button type="button" class="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @onclick="SaveTrigger" disabled="@IsSaving">
+                @if (IsSaving)
+                {
+                    <i class="fas fa-spinner fa-spin mr-2"></i>
+                }
+                @(IsEditMode ? "Update" : "Create") Trigger
+            </button>
+        </div>
+    </FooterContent>
+</TwModal>
+
+@code {
+    [Parameter] public EventCallback OnTriggerSaved { get; set; }
+
+    private bool IsModalOpen = false;
+    private bool IsEditMode = false;
+    private bool IsSaving = false;
+    private string ErrorMessage = string.Empty;
+
+    private TriggerFormData FormData = new();
+
+    private class TriggerFormData
+    {
+        public int? Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string TriggerEvent { get; set; } = string.Empty;
+        public string ActionType { get; set; } = string.Empty;
+        public string ActionValue { get; set; } = string.Empty;
+        public string? ChatConditionType { get; set; }
+        public string? ChatConditionValue { get; set; }
+        public string? WebhookUrl { get; set; }
+        public int? DelaySeconds { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    public Task OpenCreateModal()
+    {
+        IsEditMode = false;
+        FormData = new TriggerFormData { IsActive = true };
+        ErrorMessage = string.Empty;
+        IsModalOpen = true;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    public async Task OpenEditModal(int triggerId)
+    {
+        try
+        {
+            IsEditMode = true;
+            ErrorMessage = string.Empty;
+
+            var trigger = await Http.GetFromJsonAsync<TriggerFormData>($"/api/Triggers/{triggerId}");
+            if (trigger != null)
+            {
+                FormData = trigger;
+            }
+
+            IsModalOpen = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error loading trigger: {ex.Message}";
+        }
+    }
+
+    private void CloseModal()
+    {
+        IsModalOpen = false;
+    }
+
+    private void OnEventTypeChanged()
+    {
+        if (FormData.TriggerEvent != "ChatMessage")
+        {
+            FormData.ChatConditionType = null;
+            FormData.ChatConditionValue = null;
+        }
+    }
+
+    private void OnActionTypeChanged()
+    {
+        if (FormData.ActionType != "DiscordWebhook")
+        {
+            FormData.WebhookUrl = null;
+        }
+    }
+
+    private string GetActionPlaceholder()
+    {
+        return FormData.ActionType switch
+        {
+            "SendServerMessage" => "Welcome {player}! There are {playerCount} players online.",
+            "CustomCommand" => "give {steamid} wood 1000",
+            "DiscordWebhook" => "{player} joined the server! ({playerCount} online)",
+            "AppNotification" => "{player} joined the server",
+            _ => "Enter your action here..."
+        };
+    }
+
+    private async Task SaveTrigger()
+    {
+        try
+        {
+            IsSaving = true;
+            ErrorMessage = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(FormData.Name))
+            {
+                ErrorMessage = "Name is required";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(FormData.TriggerEvent))
+            {
+                ErrorMessage = "Event type is required";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(FormData.ActionType))
+            {
+                ErrorMessage = "Action type is required";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(FormData.ActionValue))
+            {
+                ErrorMessage = "Action value is required";
+                return;
+            }
+
+            if (FormData.ActionType == "DiscordWebhook" && string.IsNullOrWhiteSpace(FormData.WebhookUrl))
+            {
+                ErrorMessage = "Webhook URL is required for Discord Webhook actions";
+                return;
+            }
+
+            HttpResponseMessage response;
+            if (IsEditMode && FormData.Id.HasValue)
+            {
+                response = await Http.PutAsJsonAsync($"/api/Triggers/{FormData.Id.Value}", FormData);
+            }
+            else
+            {
+                response = await Http.PostAsJsonAsync("/api/Triggers", FormData);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                IsModalOpen = false;
+                await OnTriggerSaved.InvokeAsync();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                ErrorMessage = $"Error saving trigger: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+}

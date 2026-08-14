@@ -1,0 +1,47 @@
+<div class="@CssClass" @attributes="GetOptionalStyle()">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public int? Col { get; set; }
+    [Parameter] public int? ColLg { get; set; }
+    [Parameter] public int? ColXl { get; set; }
+    [Parameter] public string StyleAttributes { get; set; }
+    [Parameter] public string Class { get; set; }
+    [Parameter] public RenderFragment ChildContent { get; set; }
+
+    private string CssClass => BuildCssClass();
+
+    private string BuildCssClass()
+    {
+        var classes = new List<string>();
+
+        if (Col.HasValue)
+            classes.Add($"col-{Col.Value}");
+        if (ColLg.HasValue)
+            classes.Add($"col-lg-{ColLg.Value}");
+        if (ColXl.HasValue)
+            classes.Add($"col-xl-{ColXl.Value}");
+
+        if (classes.Count == 0)
+            classes.Add("col");
+
+        // Voeg custom classes toe als die er zijn
+        if (!string.IsNullOrWhiteSpace(Class))
+            classes.Add(Class);
+
+        return string.Join(" ", classes);
+    }
+
+    private Dictionary<string, object> GetOptionalStyle()
+    {
+        var dict = new Dictionary<string, object>();
+
+        if (!string.IsNullOrWhiteSpace(StyleAttributes))
+        {
+            dict["style"] = StyleAttributes;
+        }
+
+        return dict;
+    }
+}

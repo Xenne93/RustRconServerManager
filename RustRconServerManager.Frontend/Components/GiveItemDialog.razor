@@ -1,0 +1,294 @@
+@using RustRconServerManager.Frontend.Components.UI
+@inject HttpClient Http
+
+<TwModal @bind-IsOpen="IsOpen" Title="@($"Give Item to {PlayerName}")" Size="lg">
+    <ChildContent>
+    <div>
+        @if (isLoadingItems)
+        {
+            <div class="text-center py-8">
+                <span class="tw-spinner inline-block w-8 h-8"></span>
+                <p class="text-slate-400 text-sm mt-3">Loading items...</p>
+            </div>
+        }
+        else
+        {
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-slate-300 mb-1">Search Item</label>
+                    <input @bind="searchTerm" @bind:event="oninput"
+                           class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                           type="text" placeholder="Type to search items..." />
+                </div>
+
+                <div>
+                    <label class="block text-sm text-slate-300 mb-1">Select Item</label>
+                    <div class="rounded-lg border border-slate-700 bg-slate-800/30 max-h-64 overflow-y-auto divide-y divide-slate-700/50">
+                        @foreach (var item in FilteredItems)
+                        {
+                            <div class="p-3 cursor-pointer transition-colors @(selectedItem?.Id == item.Id ? "bg-orange-500/15" : "hover:bg-slate-700/40")"
+                                 @onclick="() => SelectItem(item)">
+                                <div class="flex justify-between items-center gap-3">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium @(selectedItem?.Id == item.Id ? "text-orange-400" : "text-white")">@item.DisplayName</p>
+                                        <p class="text-xs text-slate-500">@item.ShortName</p>
+                                    </div>
+                                    <span class="shrink-0 text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
+                                        Stack: @item.StackSize
+                                    </span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(item.Description))
+                                {
+                                    <p class="text-xs text-slate-500 mt-1">@item.Description</p>
+                                }
+                            </div>
+                        }
+                        @if (FilteredItems.Count == 0)
+                        {
+                            <p class="text-sm text-slate-500 p-3">No items found matching "@searchTerm"</p>
+                        }
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm text-slate-300 mb-1">Quantity</label>
+                    <input type="number" @bind="quantity" min="1" max="@(selectedItem?.StackSize ?? 1000)"
+                           class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors mb-2" />
+
+                    @if (selectedItem != null)
+                    {
+                        <div class="flex flex-wrap gap-2 mb-2">
+                            <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors" @onclick="() => SetQuantity(0.1)">
+                                1/10 (@CalculateStackFraction(0.1))
+                            </button>
+                            <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors" @onclick="() => SetQuantity(0.25)">
+                                1/4 (@CalculateStackFraction(0.25))
+                            </button>
+                            <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors" @onclick="() => SetQuantity(0.5)">
+                                1/2 (@CalculateStackFraction(0.5))
+                            </button>
+                            <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 transition-colors" @onclick="() => SetQuantity(1.0)">
+                                Full Stack (@CalculateStackFraction(1.0))
+                            </button>
+                        </div>
+                        <small class="text-slate-500 text-xs">Max stack size: @selectedItem.StackSize</small>
+                    }
+                </div>
+
+                @if (selectedItem != null)
+                {
+                    <div class="rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 text-sm">
+                        <i class="fa-solid fa-circle-info mr-1"></i>Selected: @quantity x @selectedItem.DisplayName (@selectedItem.ShortName)
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i>@errorMessage
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 text-sm">
+                        <i class="fa-solid fa-check-circle mr-1"></i>@successMessage
+                    </div>
+                }
+            </div>
+        }
+    </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2 w-full">
+            @if (isSubmitting)
+            {
+                <span class="flex items-center text-sm text-slate-400 mr-2">
+                    <span class="tw-spinner inline-block w-4 h-4 mr-2"></span>Giving item...
+                </span>
+            }
+            <button class="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    @onclick="Close" disabled="@isSubmitting">
+                Cancel
+            </button>
+            <button class="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    @onclick="SubmitGiveItem" disabled="@(isSubmitting || selectedItem == null || quantity < 1)">
+                <i class="fa-solid fa-gift mr-2"></i>Give Item
+            </button>
+        </div>
+    </FooterContent>
+</TwModal>
+
+@code {
+    [Parameter] public EventCallback OnItemGiven { get; set; }
+
+    public bool IsOpen { get; private set; } = false;
+    private string PlayerName = "";
+    private string SteamId = "";
+    private int ServerId = 0;
+
+    private List<RustItem> allItems = new();
+    private RustItem? selectedItem = null;
+    private string searchTerm = "";
+    private int quantity = 1;
+
+    private bool isLoadingItems = false;
+    private bool isSubmitting = false;
+    private string errorMessage = "";
+    private string successMessage = "";
+
+    private List<RustItem> FilteredItems =>
+        string.IsNullOrWhiteSpace(searchTerm)
+            ? allItems
+            : allItems.Where(i =>
+                i.DisplayName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                i.ShortName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                i.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    public async Task Open(string steamId, string playerName, int serverId)
+    {
+        SteamId = steamId;
+        PlayerName = playerName;
+        ServerId = serverId;
+        IsOpen = true;
+        ClearFields();
+        await LoadItems();
+        StateHasChanged();
+    }
+
+    private void SelectItem(RustItem item)
+    {
+        selectedItem = item;
+        // Set default quantity to 1 or stack size if lower
+        quantity = Math.Min(1, item.StackSize);
+        StateHasChanged();
+    }
+
+    private async Task LoadItems()
+    {
+        isLoadingItems = true;
+        errorMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            allItems = await Http.GetFromJsonAsync<List<RustItem>>("/api/Dashboard/GetRustItems") ?? new();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load items: {ex.Message}";
+            System.Console.WriteLine($"[GIVE ITEM] Error loading items: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingItems = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SubmitGiveItem()
+    {
+        if (selectedItem == null || quantity < 1)
+            return;
+
+        isSubmitting = true;
+        errorMessage = "";
+        successMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            var request = new
+            {
+                ServerId = ServerId,
+                SteamId = SteamId,
+                PlayerName = PlayerName,
+                ShortName = selectedItem.ShortName,
+                ItemDisplayName = selectedItem.DisplayName,
+                Quantity = quantity
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/Dashboard/GiveItem", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = $"Successfully gave {quantity}x {selectedItem.DisplayName} to {PlayerName}";
+                System.Console.WriteLine($"[GIVE ITEM] Success: {successMessage}");
+
+                // Wait a moment to show success message
+                await Task.Delay(1500);
+
+                // Notify parent and close
+                await OnItemGiven.InvokeAsync();
+                Close();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to give item: {error}";
+                System.Console.WriteLine($"[GIVE ITEM] Error: {errorMessage}");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+            System.Console.WriteLine($"[GIVE ITEM] Exception: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Close()
+    {
+        IsOpen = false;
+        ClearFields();
+        StateHasChanged();
+    }
+
+    private void ClearFields()
+    {
+        selectedItem = null;
+        searchTerm = "";
+        quantity = 1;
+        errorMessage = "";
+        successMessage = "";
+    }
+
+    /// <summary>
+    /// Sets the quantity based on a fraction of the stack size
+    /// </summary>
+    private void SetQuantity(double fraction)
+    {
+        if (selectedItem == null)
+            return;
+
+        quantity = Math.Max(1, (int)(selectedItem.StackSize * fraction));
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Calculates the numeric value for a stack fraction to display on buttons
+    /// </summary>
+    private int CalculateStackFraction(double fraction)
+    {
+        if (selectedItem == null)
+            return 0;
+
+        return Math.Max(1, (int)(selectedItem.StackSize * fraction));
+    }
+
+    // Rust Item DTO class (matches backend model)
+    public class RustItem
+    {
+        public int Id { get; set; }
+        public string DisplayName { get; set; } = "";
+        public string ShortName { get; set; } = "";
+        public int ItemId { get; set; }
+        public string Description { get; set; } = "";
+        public int StackSize { get; set; }
+    }
+}

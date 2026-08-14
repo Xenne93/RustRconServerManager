@@ -1,0 +1,285 @@
+@page "/Triggers"
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Frontend.Components.Auth
+@using RustRconServerManager.Frontend.Components.Triggers
+@using RustRconServerManager.Frontend.Services
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject ServerValidationHelper ServerValidationHelper
+@inject IJSRuntime JSRuntime
+
+@attribute [Authorize]
+
+<PageAccessGuard PageRoute="triggers">
+    <ContentWrapper>
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+            <h3 class="text-xl font-semibold text-white">Event Triggers</h3>
+            <button class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors" @onclick="OpenCreateForm">
+                <i class="fas fa-plus me-2"></i>New Trigger
+            </button>
+        </div>
+
+        <div class="flex items-start gap-3 rounded-lg bg-blue-500/5 border border-blue-500/20 px-4 py-3 mb-4">
+            <i class="fas fa-circle-info text-blue-400 mt-0.5"></i>
+            <p class="text-sm text-slate-300">React to server events in real-time by creating triggers. Automatically execute commands, send messages, or fire webhooks when players join, leave, die, get killed, or send chat messages.</p>
+        </div>
+
+        <TwCard HeaderTitle="Event Types" HeaderIcon="fas fa-info-circle" Class="mb-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+                <div class="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    <div class="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+                        <i class="fas fa-sign-in-alt text-sm"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-white">Player Join</p>
+                        <p class="text-xs text-slate-500">When a player connects</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    <div class="p-2 rounded-lg bg-red-500/10 text-red-400 shrink-0">
+                        <i class="fas fa-sign-out-alt text-sm"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-white">Player Leave</p>
+                        <p class="text-xs text-slate-500">When a player disconnects</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    <div class="p-2 rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+                        <i class="fas fa-skull text-sm"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-white">Player Death</p>
+                        <p class="text-xs text-slate-500">When a player dies</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    <div class="p-2 rounded-lg bg-orange-500/10 text-orange-400 shrink-0">
+                        <i class="fas fa-crosshairs text-sm"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-white">Player Kill</p>
+                        <p class="text-xs text-slate-500">When a player kills another</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    <div class="p-2 rounded-lg bg-blue-500/10 text-blue-400 shrink-0">
+                        <i class="fas fa-comment text-sm"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-white">Chat Message</p>
+                        <p class="text-xs text-slate-500">When a player chats</p>
+                    </div>
+                </div>
+            </div>
+            <div class="rounded-lg bg-slate-800/40 border border-slate-700/30 px-3 py-2.5">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 mr-2">Placeholders</span>
+                <code class="text-xs text-orange-400">{player}</code>
+                <code class="text-xs text-orange-400 ml-2">{steamid}</code>
+                <code class="text-xs text-orange-400 ml-2">{killer}</code>
+                <code class="text-xs text-orange-400 ml-2">{victim}</code>
+                <code class="text-xs text-orange-400 ml-2">{message}</code>
+                <code class="text-xs text-orange-400 ml-2">{playerCount}</code>
+            </div>
+        </TwCard>
+
+        @if (IsLoading)
+        {
+            <div class="rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-3 text-sm">
+                <i class="fas fa-spinner fa-spin me-2"></i>Loading triggers...
+            </div>
+        }
+        else if (TriggersList.Count == 0)
+        {
+            <TwCard HeaderTitle="Active Triggers">
+                <div class="text-center py-8">
+                    <i class="fas fa-bolt text-4xl text-slate-600 mb-4"></i>
+                    <p class="text-slate-400 mb-4">No triggers configured yet.</p>
+                    <button class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors" @onclick="OpenCreateForm">
+                        <i class="fas fa-plus mr-2"></i>Create Trigger
+                    </button>
+                </div>
+            </TwCard>
+        }
+        else
+        {
+            <TwCard HeaderTitle="@($"Active Triggers ({TriggersList.Count})")" NoPadding="true">
+                <div class="overflow-x-auto">
+                    <table class="tw-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Event</th>
+                                <th>Command</th>
+                                <th>Status</th>
+                                <th>Triggered</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var trigger in TriggersList)
+                            {
+                                <tr class="border-b border-slate-700/30 hover:bg-slate-800/30 transition-colors">
+                                    <td>
+                                        <strong class="text-white">@trigger.Name</strong>
+                                        @if (!string.IsNullOrEmpty(trigger.Description))
+                                        {
+                                            <br />
+                                            <small class="text-slate-400">@trigger.Description</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        <TwBadge Variant="info">@trigger.TriggerEvent</TwBadge>
+                                        @if (!string.IsNullOrEmpty(trigger.ChatConditionType))
+                                        {
+                                            <br />
+                                            <small class="text-slate-400">@trigger.ChatConditionType: "@trigger.ChatConditionValue"</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        <TwBadge Variant="default">@trigger.ActionType</TwBadge>
+                                        <br />
+                                        <code class="text-xs text-slate-300">@(trigger.ActionValue.Length > 50 ? trigger.ActionValue.Substring(0, 50) + "..." : trigger.ActionValue)</code>
+                                    </td>
+                                    <td>
+                                        @if (trigger.IsActive)
+                                        {
+                                            <TwBadge Variant="success">Active</TwBadge>
+                                        }
+                                        else
+                                        {
+                                            <TwBadge Variant="default">Inactive</TwBadge>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (trigger.LastTriggeredAt.HasValue)
+                                        {
+                                            <small class="text-slate-300">@trigger.LastTriggeredAt.Value.ToLocalTime().ToString("dd-MM HH:mm")</small>
+                                            <br />
+                                            <small class="text-slate-400">@trigger.TriggerCount times</small>
+                                        }
+                                        else
+                                        {
+                                            <small class="text-slate-400">Never</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        <button class="px-2 py-1 text-xs border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 rounded transition-colors mr-1" @onclick="() => OpenEditForm(trigger)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="px-2 py-1 text-xs border border-red-500/50 text-red-400 hover:bg-red-500/10 rounded transition-colors" @onclick="() => DeleteTrigger(trigger.Id)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </TwCard>
+        }
+
+        <!-- Trigger Form Modal -->
+        <TriggerFormModal @ref="triggerFormModal" OnTriggerSaved="LoadTriggers" />
+
+    </ContentWrapper>
+</PageAccessGuard>
+
+@code {
+    private List<TriggerDto> TriggersList = new();
+    private bool IsLoading = true;
+    private TriggerFormModal? triggerFormModal;
+
+    private class TriggerDto
+    {
+        public int Id { get; set; }
+        public int RconServerId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string TriggerEvent { get; set; } = string.Empty;
+        public string ActionType { get; set; } = string.Empty;
+        public string ActionValue { get; set; } = string.Empty;
+        public string? ChatConditionType { get; set; }
+        public string? ChatConditionValue { get; set; }
+        public string? WebhookUrl { get; set; }
+        public int? DelaySeconds { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTime? LastTriggeredAt { get; set; }
+        public int TriggerCount { get; set; }
+        public bool? LastExecutionSuccess { get; set; }
+        public string? LastExecutionError { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        bool hasAccess = await ServerValidationHelper.ValidateActiveServerAsync();
+        if (!hasAccess)
+            return;
+
+        await LoadTriggers();
+    }
+
+    private async Task LoadTriggers()
+    {
+        try
+        {
+            IsLoading = true;
+
+            TriggersList = await Http.GetFromJsonAsync<List<TriggerDto>>("/api/Triggers") ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading triggers: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenCreateForm()
+    {
+        if (triggerFormModal != null)
+        {
+            await triggerFormModal.OpenCreateModal();
+        }
+    }
+
+    private async Task OpenEditForm(TriggerDto trigger)
+    {
+        if (triggerFormModal != null)
+        {
+            await triggerFormModal.OpenEditModal(trigger.Id);
+        }
+    }
+
+    private async Task DeleteTrigger(int id)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this trigger?");
+        if (!confirmed)
+            return;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/Triggers/{id}");
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadTriggers();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to delete trigger");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting trigger: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+    }
+}

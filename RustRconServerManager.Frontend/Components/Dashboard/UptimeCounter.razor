@@ -1,0 +1,21 @@
+@using RustRconServerManager.Frontend.Components.UI
+
+<TwStatCard Title="Uptime"
+            Value="@Uptime"
+            Subtitle="server running"
+            Variant="success">
+    <Icon>
+        <i class="fas fa-clock"></i>
+    </Icon>
+</TwStatCard>
+
+@code {
+    public string Uptime = "0h 0m";
+
+    public async Task Update(int? uptimeInSeconds)
+    {
+        TimeSpan time = TimeSpan.FromSeconds(double.Parse(uptimeInSeconds.ToString()));
+        Uptime = $"{(int)time.TotalHours}h {time.Minutes}m";
+        await InvokeAsync(StateHasChanged);
+    }
+}

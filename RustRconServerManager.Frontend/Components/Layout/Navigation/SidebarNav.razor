@@ -1,0 +1,259 @@
+@using RustRconServerManager.Frontend.Services
+@using RustRconServerManager.Shared.Dashboard
+@inject NavigationManager Nav
+@inject NavigationHelper NavHelper
+@inject ServerStateService ServerState
+@inject HttpClient Http
+@implements IAsyncDisposable
+
+@* Sidebar - Desktop only (hidden on mobile) *@
+<aside class="hidden lg:flex fixed left-0 top-16 bottom-0 w-64 border-r border-slate-800/50 bg-[#0f0f17]/50 backdrop-blur-sm flex-col z-30">
+    <nav class="flex-1 p-4 space-y-1">
+        @if (permissionsLoaded)
+        {
+            @foreach (var item in GetNavItems())
+            {
+                if (CanAccessPage(item.Route))
+                {
+                    var isActive = IsActive(item.Route);
+                    <a href="@NavHelper.GetUrl(item.Route)"
+                       class="@(isActive ? "tw-nav-link-active" : "tw-nav-link")">
+                        <i class="@item.Icon @(isActive ? "text-orange-400" : "") w-5 text-center"></i>
+                        @item.Label
+                    </a>
+                }
+            }
+        }
+    </nav>
+
+    @* Server Status Widget — only shown when a server is selected *@
+    @if (_selectedServerId.HasValue && _selectedServerId.Value > 0)
+    {
+    <div class="p-4 border-t border-slate-800/50">
+        <div class="rounded-lg bg-slate-800/30 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Server Status</span>
+                <div class="w-2 h-2 rounded-full @(ServerState.IsConnected ? "bg-emerald-500 animate-pulse" : "bg-slate-500")"></div>
+            </div>
+            <div class="space-y-2">
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-slate-500 flex items-center gap-1">
+                        <i class="fas fa-signal text-xs"></i> FPS
+                    </span>
+                    <span class="text-white font-medium">@ServerFps</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-slate-500 flex items-center gap-1">
+                        <i class="fas fa-users text-xs"></i> Players
+                    </span>
+                    <span class="text-white font-medium">@ServerPlayers</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-slate-500 flex items-center gap-1">
+                        <i class="fas fa-microchip text-xs"></i> Entities
+                    </span>
+                    <span class="text-white font-medium">@ServerEntities</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-slate-500 flex items-center gap-1">
+                        <i class="fas fa-clock text-xs"></i> Uptime
+                    </span>
+                    <span class="text-white font-medium">@ServerUptime</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    }
+</aside>
+
+@code {
+    private string ServerFps = "--";
+    private string ServerPlayers = "--";
+    private string ServerEntities = "--";
+    private string ServerUptime = "--";
+    private bool IsModerator = false;
+    private bool permissionsLoaded = false;
+    private HashSet<string> AllowedPages = new();
+    private int? _selectedServerId;
+
+    private readonly PeriodicTimer _timer = new(TimeSpan.FromSeconds(10));
+    private readonly CancellationTokenSource _cts = new();
+
+    private record NavItem(string Route, string Label, string Icon);
+
+    private List<NavItem> GetNavItems()
+    {
+        // When no server is selected, only show Manage Servers
+        if (!_selectedServerId.HasValue || _selectedServerId.Value <= 0)
+        {
+            if (!IsModerator)
+                return new List<NavItem> { new("manage-servers", "Manage Servers", "fas fa-server") };
+            return new List<NavItem>();
+        }
+
+        var items = new List<NavItem>
+        {
+            new("dashboard", "Dashboard", "fas fa-chart-line"),
+            new("map", "Map", "fas fa-map"),
+            new("statistics", "Statistics", "fas fa-chart-bar"),
+            new("console", "Console", "fas fa-terminal"),
+            new("players", "Players", "fas fa-users"),
+            new("banlist", "Bans", "fas fa-ban"),
+            new("scheduler", "Scheduler", "fas fa-clock"),
+            new("triggers", "Triggers", "fas fa-bolt"),
+            new("server-actions", "Server Actions", "fas fa-sliders-h"),
+            new("server-management", "Server Management", "fas fa-cogs"),
+        };
+
+        if (!IsModerator)
+        {
+            items.Add(new("manage-servers", "Manage Servers", "fas fa-server"));
+        }
+
+        return items;
+    }
+
+    private bool CanAccessPage(string pageRoute)
+    {
+        if (!IsModerator) return true;
+        return AllowedPages.Contains(pageRoute);
+    }
+
+    private bool IsActive(string route)
+    {
+        string current = Nav.Uri.Replace(Nav.BaseUri, "/").Split('?')[0].ToLower();
+        string target = "/" + route.TrimStart('/');
+        if (!current.StartsWith("/")) current = "/" + current;
+        return current == target || (target == "/dashboard" && current == "/");
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        ServerState.OnServerChanged += OnServerChanged;
+        _selectedServerId = await ServerState.GetSelectedServerIdAsync();
+        await LoadUserPermissions();
+        await FetchServerStatus();
+        _ = TickLoop();
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnServerChanged()
+    {
+        InvokeAsync(async () =>
+        {
+            _selectedServerId = await ServerState.GetSelectedServerIdAsync();
+            await FetchServerStatus();
+            StateHasChanged();
+        });
+    }
+
+    private async Task TickLoop()
+    {
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                await FetchServerStatus();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task FetchServerStatus()
+    {
+        try
+        {
+            // Skip API call if no server is selected
+            var serverId = await ServerState.GetSelectedServerIdAsync();
+            if (!serverId.HasValue || serverId.Value <= 0) return;
+
+            var info = await Http.GetFromJsonAsync<Dashboard_ServerBaseInformationDTO>("/api/Dashboard/GetServerBaseInformation");
+
+            if (info != null)
+            {
+                ServerFps = info.LatestFpsCount?.ToString() ?? "--";
+                ServerPlayers = info.LatestPlayerCount?.ToString() ?? "--";
+                ServerEntities = info.LatestEntityCount?.ToString() ?? "--";
+                ServerUptime = FormatUptime(info.LatestUptime);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SidebarNav] Error fetching server status: {ex.Message}");
+            ServerFps = "--";
+            ServerPlayers = "--";
+            ServerEntities = "--";
+            ServerUptime = "--";
+        }
+    }
+
+    private static string FormatUptime(int? seconds)
+    {
+        if (!seconds.HasValue || seconds.Value <= 0) return "--";
+        var ts = TimeSpan.FromSeconds(seconds.Value);
+        if (ts.TotalDays >= 1) return $"{(int)ts.TotalDays}d {ts.Hours}h";
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        return $"{ts.Minutes}m";
+    }
+
+    private async Task LoadUserPermissions()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Account/BasicInfo");
+            if (response.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+            {
+                IsModerator = response.GetProperty("isModerator").GetBoolean();
+                if (IsModerator)
+                {
+                    var permissions = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Moderator/MyPagePermissions");
+                    if (permissions.ValueKind != System.Text.Json.JsonValueKind.Undefined &&
+                        permissions.TryGetProperty("allowedPages", out var allowedPagesElement))
+                    {
+                        AllowedPages = new HashSet<string>();
+                        foreach (var page in allowedPagesElement.EnumerateArray())
+                        {
+                            var pageRoute = page.GetString();
+                            if (!string.IsNullOrEmpty(pageRoute))
+                            {
+                                AllowedPages.Add(pageRoute);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SidebarNav] Error loading permissions: {ex.Message}");
+        }
+        finally
+        {
+            permissionsLoaded = true;
+        }
+    }
+
+    public void UpdateServerStatus(string fps, string players, string entities)
+    {
+        ServerFps = fps;
+        ServerPlayers = players;
+        ServerEntities = entities;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        ServerState.OnServerChanged -= OnServerChanged;
+        _cts.Cancel();
+        _timer.Dispose();
+        _cts.Dispose();
+        await Task.CompletedTask;
+    }
+}

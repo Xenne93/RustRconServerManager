@@ -1,0 +1,82 @@
+@page "/Map"
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Frontend.Components.Dashboard
+@using RustRconServerManager.Frontend.Services
+@inject HttpClient Http
+@inject ServerValidationHelper ServerValidationHelper
+@implements IAsyncDisposable
+
+@attribute [Authorize]
+
+@if (!_hasServerAccess)
+{
+    <ContentWrapper>
+        <div class="flex items-center justify-center py-12">
+            <div class="tw-spinner"></div>
+        </div>
+    </ContentWrapper>
+}
+else
+{
+    <ContentWrapper>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-white">Map</h1>
+                <p class="text-slate-400 text-sm mt-1">Live server map with player and sleeping bag tracking</p>
+            </div>
+        </div>
+
+        <MapCard @ref="mapCard" />
+    </ContentWrapper>
+}
+
+@code {
+    private readonly PeriodicTimer _timer = new(TimeSpan.FromSeconds(10));
+    private readonly CancellationTokenSource _cts = new();
+
+    private MapCard mapCard;
+    private bool _hasServerAccess = false;
+    private bool _initialLoadDone = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hasServerAccess = await ServerValidationHelper.ValidateActiveServerAsync();
+        if (!_hasServerAccess)
+            return;
+
+        _ = TickLoop();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_initialLoadDone && _hasServerAccess)
+        {
+            _initialLoadDone = true;
+        }
+    }
+
+    private async Task TickLoop()
+    {
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                if (mapCard != null)
+                {
+                    await mapCard.RefreshPlayers();
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _timer.Dispose();
+        _cts.Dispose();
+        await Task.CompletedTask;
+    }
+}

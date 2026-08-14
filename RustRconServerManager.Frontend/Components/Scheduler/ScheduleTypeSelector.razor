@@ -1,0 +1,38 @@
+@using RustRconServerManager.Shared.Scheduler
+
+<div class="mb-4">
+    <label class="block text-sm font-medium text-slate-300 mb-2">Schedule Type</label>
+    <div class="flex flex-wrap gap-1.5">
+        @foreach (var (value, label) in Types)
+        {
+            <button type="button"
+                    class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors @(CurrentScheduleType == value ? "bg-orange-500 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white border border-slate-700")"
+                    @onclick="() => SelectType(value)">
+                @label
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly (int Value, string Label)[] Types = new[]
+    {
+        (0, "One-Time"),
+        (1, "Hourly"),
+        (2, "Daily"),
+        (3, "Weekly"),
+        (4, "Monthly")
+    };
+
+    [Parameter]
+    public int CurrentScheduleType { get; set; } = 0;
+
+    [Parameter]
+    public EventCallback<int> OnScheduleTypeChange { get; set; }
+
+    private async Task SelectType(int scheduleType)
+    {
+        CurrentScheduleType = scheduleType;
+        await OnScheduleTypeChange.InvokeAsync(scheduleType);
+    }
+}
