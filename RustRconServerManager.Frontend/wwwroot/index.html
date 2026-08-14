@@ -81,34 +81,45 @@
     };
 </script>
 
-<!-- Privacy-friendly analytics by Plausible - only loaded when this installation has
+<!-- Privacy-friendly analytics by Plausible - only sent when this installation has
      opted in (Panel Settings > Anonymous Usage Statistics). Checked fresh on every page
-     load so toggling the setting takes effect immediately, without a rebuild/restart. -->
+     load so toggling the setting takes effect immediately, without a rebuild/restart.
+
+     Posts straight to Plausible's Events API instead of loading the official tracking
+     script: that script hard-blocks localhost/private-IP hostnames client-side (to stop
+     developers polluting their own stats while building a site), but a huge share of
+     self-hosted installs are opened via exactly that - http://localhost:port or a bare
+     LAN IP - on the very machine running the panel. The Events API itself has no such
+     restriction (confirmed directly against telemetry.xenne.eu), so calling it ourselves
+     is the only way to actually count those installs. -->
 <script>
-    (function () {
-        fetch('/api/panelsettings/analytics-status')
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (data) {
-                if (!data || !data.enabled) return;
+    fetch('/api/panelsettings/analytics-status')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            if (data && data.enabled) sendPlausibleEvent('pageview');
+        })
+        .catch(function () { });
 
-                window.plausible = window.plausible || function () { (plausible.q = plausible.q || []).push(arguments); };
-                plausible.init = plausible.init || function (i) { plausible.o = i || {}; };
-                plausible.init();
+    function sendPlausibleEvent(name, props) {
+        try {
+            fetch('https://telemetry.xenne.eu/api/event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    url: location.href,
+                    domain: 'rustrconservermanager.xenne.eu',
+                    props: props || undefined
+                })
+            }).catch(function () { });
+        } catch (e) { }
+    }
 
-                var s = document.createElement('script');
-                s.async = true;
-                s.src = 'https://telemetry.xenne.eu/js/pa-SlrtpzewJk9sPSRF6GG_A.js';
-                document.head.appendChild(s);
-            })
-            .catch(function () { });
-    })();
-
-    // Called by the authenticated app (once analytics-status has confirmed opt-in) with
-    // aggregate counts only - no SteamIDs, emails, or other identifiable data.
+    // Called by the authenticated app - it checks analytics-status itself (via the
+    // backend, authoritatively) before ever calling this, so no need to re-check here.
+    // Aggregate counts only - no SteamIDs, emails, or other identifiable data.
     window.sendAnalyticsSnapshot = function (players, servers, users) {
-        if (window.plausible) {
-            window.plausible('server-stats', { props: { players: players, servers: servers, users: users } });
-        }
+        sendPlausibleEvent('server-stats', { players: players, servers: servers, users: users });
     };
 </script>
 </body>
