@@ -59,13 +59,6 @@ public class AnalyticsStatusDto
     public bool Enabled { get; set; } = false;
 }
 
-public class AnalyticsSnapshotDto
-{
-    public int Servers { get; set; }
-    public int Players { get; set; }
-    public int Users { get; set; }
-}
-
 public class DeveloperVacBanOverrideDto
 {
     public int Id { get; set; }

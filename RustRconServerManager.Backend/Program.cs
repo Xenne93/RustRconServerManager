@@ -94,6 +94,10 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<MapSto
 // Register the RrsmModDataService (pulls map/sleepingbag/toolcupboard data from Rust servers over RCON)
 builder.Services.AddScoped<RrsmModDataService>();
 
+// Register the AnalyticsReportingService (opt-in daily anonymous usage check-in - see PanelSettings.AnalyticsEnabled)
+builder.Services.AddHttpClient();
+builder.Services.AddHostedService<AnalyticsReportingService>();
+
 // Register the RconClientFactory as a singleton service
 builder.Services.AddHostedService(provider => provider.GetRequiredService<RconBackgroundService>());
 
