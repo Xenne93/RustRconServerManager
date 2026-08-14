@@ -19,6 +19,20 @@ Once it's running, open **http://localhost:5000** in your browser and create you
 admin account - the first person to open the panel gets to do this, so don't expose
 the port publicly until you've completed it.
 
+## Password Reset
+
+If an admin is locked out and doesn't have SMTP configured for the "forgot password"
+email flow (or would rather not depend on it), reset the account's password directly
+from the terminal instead:
+
+**Windows:** double-click `reset-password.bat` (or run `reset-password.ps1`).
+**Linux:** run `./reset-password.sh`
+
+This prompts for the account's email address and a new password, then signs out any
+existing sessions for that account. The instance must already be running (started via
+`start.bat`/`start.sh`) since it reuses that same running database instead of starting
+a second one.
+
 ## About the bundled database
 
 The bundled MariaDB instance listens only on `127.0.0.1:3307` (loopback, custom port).
