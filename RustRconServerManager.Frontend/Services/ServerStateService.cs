@@ -94,6 +94,16 @@ namespace RustRconServerManager.Frontend.Services
 
                 Console.WriteLine($"[ServerStateService] Successfully updated server in database");
 
+                // Reset connection-check state on an actual server switch so the newly
+                // selected server never inherits a stale connected/disconnected verdict
+                // (or a banner stuck hidden because monitoring never ran) from whatever
+                // was selected before - the next poll always re-evaluates fresh.
+                if (_cachedServerId != serverId)
+                {
+                    _hasCheckedOnce = false;
+                    _isConnected = true;
+                }
+
                 // Update cache
                 _cachedServerId = serverId;
                 _cachedServerName = serverName;
