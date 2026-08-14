@@ -1090,7 +1090,7 @@
                                     <div class="aspect-square rounded-lg border @(item != null ? "border-slate-600 bg-slate-800/60" : "border-slate-700/40 bg-slate-800/20") flex flex-col items-center justify-center p-1 relative group">
                                         @if (item != null)
                                         {
-                                            <img src="https://cdn.RustRconServerManager.com/icons/@(item.ShortName).png" alt="@item.DisplayName" class="w-full h-full object-contain" onerror="this.style.display='none'" />
+                                            <img src="/images/items/@(item.ShortName).png" alt="@item.DisplayName" class="w-full h-full object-contain" onerror="this.style.display='none'" />
                                             @if (item.Amount > 1)
                                             {
                                                 <span class="absolute bottom-0.5 right-1 text-[10px] font-bold text-white drop-shadow-lg">x@(item.Amount)</span>
@@ -1135,7 +1135,7 @@
                                     <div class="aspect-square rounded-lg border @(item != null ? "border-slate-600 bg-slate-800/60" : "border-slate-700/40 bg-slate-800/20") flex flex-col items-center justify-center p-1 relative group">
                                         @if (item != null)
                                         {
-                                            <img src="https://cdn.RustRconServerManager.com/icons/@(item.ShortName).png" alt="@item.DisplayName" class="w-full h-full object-contain" onerror="this.style.display='none'" />
+                                            <img src="/images/items/@(item.ShortName).png" alt="@item.DisplayName" class="w-full h-full object-contain" onerror="this.style.display='none'" />
                                             @if (item.MaxCondition > 0)
                                             {
                                                 var condPercent = (item.Condition / item.MaxCondition) * 100;
@@ -1172,7 +1172,7 @@
                                     <div class="aspect-square rounded-lg border @(item != null ? "border-slate-600 bg-slate-800/60" : "border-slate-700/40 bg-slate-800/20") flex flex-col items-center justify-center p-1 relative group">
                                         @if (item != null)
                                         {
-                                            <img src="https://cdn.RustRconServerManager.com/icons/@(item.ShortName).png" alt="@item.DisplayName" class="w-full h-full object-contain" onerror="this.style.display='none'" />
+                                            <img src="/images/items/@(item.ShortName).png" alt="@item.DisplayName" class="w-full h-full object-contain" onerror="this.style.display='none'" />
                                             @if (item.Amount > 1)
                                             {
                                                 <span class="absolute bottom-0.5 right-1 text-[10px] font-bold text-white drop-shadow-lg">x@(item.Amount)</span>
