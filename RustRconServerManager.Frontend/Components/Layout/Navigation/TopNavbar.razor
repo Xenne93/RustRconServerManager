@@ -27,83 +27,7 @@
             </a>
         </div>
 
-        @* Center: Server Selector *@
-        <div class="hidden md:flex items-center">
-            <TwDropdown Align="center">
-                <TriggerContent>
-                    <button type="button" class="tw-btn-outline flex items-center gap-2">
-                        <i class="fas fa-server text-orange-400 text-sm"></i>
-                        <span class="max-w-[200px] truncate">
-                            @(IsLoading ? "Loading..." : CurrentServerName)
-                        </span>
-                        @if (!IsLoading && ActiveServerId.HasValue)
-                        {
-                            @if (ActiveServerIsConnected)
-                            {
-                                <span class="tw-badge-success text-[10px]">Online</span>
-                            }
-                            else
-                            {
-                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-medium">Offline</span>
-                            }
-                        }
-                        <i class="fas fa-chevron-down text-xs text-slate-400"></i>
-                    </button>
-                </TriggerContent>
-                <ChildContent>
-                    <div class="w-64">
-                        @if (IsLoading)
-                        {
-                            <div class="px-3 py-6 text-center text-slate-500 text-sm">
-                                <i class="fas fa-spinner fa-spin mr-2"></i>Loading servers...
-                            </div>
-                        }
-                        else if (Servers?.Count > 0)
-                        {
-                            @foreach (var server in Servers)
-                            {
-                                <TwDropdownItem IsActive="@(server.ServerId == ActiveServerId)"
-                                                OnClick="@(async _ => await SwitchServer(server.ServerId.GetValueOrDefault(), server.ServerName ?? "Unknown"))">
-                                    <div class="flex items-center justify-between w-full">
-                                        <span>@server.ServerName</span>
-                                        @if (server.IsConnected == true)
-                                        {
-                                            <span class="tw-badge-success text-[10px]">Online</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-medium">Offline</span>
-                                        }
-                                    </div>
-                                </TwDropdownItem>
-                            }
-                            @if (!IsModerator)
-                            {
-                                <TwDropdownSeparator />
-                                <TwDropdownItem Href="@NavHelper.GetUrl("manage-servers")">
-                                    <i class="fas fa-cog text-xs mr-2"></i>Manage Servers
-                                </TwDropdownItem>
-                            }
-                        }
-                        else
-                        {
-                            <div class="px-3 py-6 text-center text-slate-500 text-sm">
-                                No servers configured
-                            </div>
-                            @if (!IsModerator)
-                            {
-                                <TwDropdownSeparator />
-                                <TwDropdownItem Href="@NavHelper.GetUrl("manage-servers")">
-                                    <i class="fas fa-cog text-xs mr-2"></i>Manage Servers
-                                </TwDropdownItem>
-                            }
-                        }
-                    </div>
-                </ChildContent>
-            </TwDropdown>
-        </div>
-
-        @* Right: Notifications & User *@
+        @* Right: Server Selector, Notifications & User *@
         <div class="flex items-center gap-2">
             @* Hidden until notifications feature is implemented
             <button type="button" class="tw-btn-ghost tw-btn-icon text-slate-400 hover:text-white relative">
@@ -111,6 +35,81 @@
                 <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full"></span>
             </button>
             *@
+
+            <div class="hidden md:flex items-center">
+                <TwDropdown Align="right">
+                    <TriggerContent>
+                        <button type="button" class="tw-btn-outline flex items-center gap-2">
+                            <i class="fas fa-server text-orange-400 text-sm"></i>
+                            <span class="max-w-[200px] truncate">
+                                @(IsLoading ? "Loading..." : CurrentServerName)
+                            </span>
+                            @if (!IsLoading && ActiveServerId.HasValue)
+                            {
+                                @if (ActiveServerIsConnected)
+                                {
+                                    <span class="tw-badge-success text-[10px]">Online</span>
+                                }
+                                else
+                                {
+                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-medium">Offline</span>
+                                }
+                            }
+                            <i class="fas fa-chevron-down text-xs text-slate-400"></i>
+                        </button>
+                    </TriggerContent>
+                    <ChildContent>
+                        <div class="w-64">
+                            @if (IsLoading)
+                            {
+                                <div class="px-3 py-6 text-center text-slate-500 text-sm">
+                                    <i class="fas fa-spinner fa-spin mr-2"></i>Loading servers...
+                                </div>
+                            }
+                            else if (Servers?.Count > 0)
+                            {
+                                @foreach (var server in Servers)
+                                {
+                                    <TwDropdownItem IsActive="@(server.ServerId == ActiveServerId)"
+                                                    OnClick="@(async _ => await SwitchServer(server.ServerId.GetValueOrDefault(), server.ServerName ?? "Unknown"))">
+                                        <div class="flex items-center justify-between w-full">
+                                            <span>@server.ServerName</span>
+                                            @if (server.IsConnected == true)
+                                            {
+                                                <span class="tw-badge-success text-[10px]">Online</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-medium">Offline</span>
+                                            }
+                                        </div>
+                                    </TwDropdownItem>
+                                }
+                                @if (!IsModerator)
+                                {
+                                    <TwDropdownSeparator />
+                                    <TwDropdownItem Href="@NavHelper.GetUrl("manage-servers")">
+                                        <i class="fas fa-cog text-xs mr-2"></i>Manage Servers
+                                    </TwDropdownItem>
+                                }
+                            }
+                            else
+                            {
+                                <div class="px-3 py-6 text-center text-slate-500 text-sm">
+                                    No servers configured
+                                </div>
+                                @if (!IsModerator)
+                                {
+                                    <TwDropdownSeparator />
+                                    <TwDropdownItem Href="@NavHelper.GetUrl("manage-servers")">
+                                        <i class="fas fa-cog text-xs mr-2"></i>Manage Servers
+                                    </TwDropdownItem>
+                                }
+                            }
+                        </div>
+                    </ChildContent>
+                </TwDropdown>
+            </div>
 
             <ThemeSwitcher />
 
