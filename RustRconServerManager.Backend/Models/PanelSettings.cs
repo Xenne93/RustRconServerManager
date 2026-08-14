@@ -62,6 +62,14 @@ public class PanelSettings
     public DateTime? LastAnalyticsSentAt { get; set; }
 
     /// <summary>
+    /// Steam Web API key, encrypted at rest via IRconPasswordsCryptoService, configurable
+    /// at runtime from the Panel Settings page. Takes priority over the SteamApi:ApiKey
+    /// environment variable/appsettings value when set (see SteamApiService), so existing
+    /// env-var-based setups keep working until an admin overrides it here.
+    /// </summary>
+    public string? SteamApiKeyEncrypted { get; set; }
+
+    /// <summary>
     /// When the settings were created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

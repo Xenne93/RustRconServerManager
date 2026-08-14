@@ -18,12 +18,18 @@ public class PanelSettingsController : ControllerBase
     private readonly AppDbContext _dbContext;
     private readonly ILogger<PanelSettingsController> _logger;
     private readonly AutoUpdateFlagFileService _autoUpdateFlagFileService;
+    private readonly IRconPasswordsCryptoService _cryptoService;
 
-    public PanelSettingsController(AppDbContext dbContext, ILogger<PanelSettingsController> logger, AutoUpdateFlagFileService autoUpdateFlagFileService)
+    public PanelSettingsController(
+        AppDbContext dbContext,
+        ILogger<PanelSettingsController> logger,
+        AutoUpdateFlagFileService autoUpdateFlagFileService,
+        IRconPasswordsCryptoService cryptoService)
     {
         _dbContext = dbContext;
         _logger = logger;
         _autoUpdateFlagFileService = autoUpdateFlagFileService;
+        _cryptoService = cryptoService;
     }
 
     /// <summary>
@@ -375,6 +381,50 @@ public class PanelSettingsController : ControllerBase
     }
 
     /// <summary>
+    /// Sets or clears the Steam Web API key. The key is never returned by any GET endpoint
+    /// once saved - PanelSettingsDto only exposes whether one is configured.
+    /// </summary>
+    [HttpPut("steam-api-key")]
+    public async Task<ActionResult<PanelSettingsDto>> SetSteamApiKey([FromBody] SetSteamApiKeyDto dto)
+    {
+        try
+        {
+            var currentUser = await User.GetUser(_dbContext);
+            if (!currentUser.isAdmin)
+                return Forbid();
+
+            var panelSettings = await _dbContext.PanelSettings
+                .FirstOrDefaultAsync(ps => ps.SystemProfileId == currentUser.SystemProfileId);
+
+            if (panelSettings == null)
+                return NotFound("Panel settings not found");
+
+            if (dto.RemoveKey)
+            {
+                panelSettings.SteamApiKeyEncrypted = null;
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.SteamApiKey))
+            {
+                panelSettings.SteamApiKeyEncrypted = _cryptoService.Encrypt(dto.SteamApiKey.Trim());
+            }
+            // Empty/omitted and not RemoveKey: leave the existing key untouched.
+
+            panelSettings.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("[PanelSettingsController] Steam API key {Action} by {User}",
+                dto.RemoveKey ? "removed" : "updated", currentUser.Email);
+
+            return Ok(MapToDto(panelSettings));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PanelSettingsController] Error setting Steam API key");
+            return StatusCode(500, new { error = "Error updating Steam API key" });
+        }
+    }
+
+    /// <summary>
     /// Lists all developer-mode fake VAC-ban overrides.
     /// </summary>
     [HttpGet("developer/vac-overrides")]
@@ -508,6 +558,7 @@ public class PanelSettingsController : ControllerBase
             AutoUpdateEnabled = panelSettings.AutoUpdateEnabled,
             DeveloperModeEnabled = panelSettings.DeveloperModeEnabled,
             AnalyticsEnabled = panelSettings.AnalyticsEnabled,
+            SteamApiKeyConfigured = !string.IsNullOrEmpty(panelSettings.SteamApiKeyEncrypted),
             CreatedAt = panelSettings.CreatedAt,
             UpdatedAt = panelSettings.UpdatedAt
         };

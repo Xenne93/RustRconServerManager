@@ -9,6 +9,7 @@ public class PanelSettingsDto
     public bool AutoUpdateEnabled { get; set; } = true;
     public bool DeveloperModeEnabled { get; set; } = false;
     public bool AnalyticsEnabled { get; set; } = false;
+    public bool SteamApiKeyConfigured { get; set; } = false;
 
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -57,6 +58,19 @@ public class SetAnalyticsDto
 public class AnalyticsStatusDto
 {
     public bool Enabled { get; set; } = false;
+}
+
+public class SetSteamApiKeyDto
+{
+    /// <summary>
+    /// New key to store. Empty/omitted leaves the current key unchanged unless RemoveKey is set.
+    /// </summary>
+    public string? SteamApiKey { get; set; }
+
+    /// <summary>
+    /// When true, clears the stored key regardless of SteamApiKey.
+    /// </summary>
+    public bool RemoveKey { get; set; } = false;
 }
 
 public class DeveloperVacBanOverrideDto

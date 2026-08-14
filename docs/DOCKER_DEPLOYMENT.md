@@ -53,7 +53,7 @@ relevant ones:
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `MARIADB_ROOT_PASSWORD` | Bundled MariaDB credentials |
 | `JWT_KEY` / `RCON_ENCRYPTION_KEY` | Generate long random values - never reuse the example values |
 | `SMTP_*` | Needed for the "forgot password" email flow. Leave `SMTP_HOST` blank to disable it |
-| `STEAM_API_KEY` | Optional - player profile/VAC-ban lookups |
+| `STEAM_API_KEY` | Optional - player profile/VAC-ban lookups. Can also be set (or overridden) at runtime from Panel Settings > Steam API Key, without a restart |
 | `PROXYCHECK_API_KEY` / `PROXYCHECK_HMAC_KEY` | Optional - VPN/proxy detection in Server Protection |
 | `AUTO_UPDATE` / `SKIP_AUTO_UPDATE` | Self-update behavior on container restart, see below |
 
