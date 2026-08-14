@@ -94,8 +94,8 @@ don't lose your data.
 
 ## Connecting a Rust server
 
-1. Install the companion Oxide plugin on your Rust server (distributed separately from
-   this repo). No configuration needed - the plugin has none.
+1. Install the companion Oxide plugin (`oxide-mods/RustRconServerManager.cs` in this
+   repo) on your Rust server. No configuration needed - the plugin has none.
 2. In the panel, go to Manage Servers → add your server, then run the "Initialize Panel
    Mod" wizard - it just confirms the mod responds over RCON.
 3. Use the "Refresh Map" button on the Dashboard to pull the current map (and sleeping
@@ -111,8 +111,8 @@ don't lose your data.
 - `RustRconServerManager.Shared` / `.Shared.Configuration` - shared DTOs/models/config
 - `Xenne.RCON` - the RCON client library used to talk to Rust servers
 
-The companion Oxide plugin (live map/sleeping bags/tool cupboards) and the mobile
-companion app are distributed separately from this repo, not bundled here.
+The companion Oxide plugin (live map/sleeping bags/tool cupboards) lives in
+`oxide-mods/` in this repo. The mobile companion app is distributed separately.
 
 ## Documentation
 
