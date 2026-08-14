@@ -25,6 +25,46 @@
     --input: 217 33% 17%;
     --ring: 24 95% 53%;
     --radius: 0.5rem;
+
+    /* Dark mode (default): matches Tailwind's stock slate/white RGB values exactly, so
+       this is a pure no-op until [data-theme="light"] overrides it below. Every slate-
+       and white-based utility class in the app resolves through these variables
+       (see tailwind.config.js). */
+    --color-white: 255 255 255;
+    --slate-50: 248 250 252;
+    --slate-100: 241 245 249;
+    --slate-200: 226 232 240;
+    --slate-300: 203 213 225;
+    --slate-400: 148 163 184;
+    --slate-500: 100 116 139;
+    --slate-600: 71 85 105;
+    --slate-700: 51 65 85;
+    --slate-800: 30 41 59;
+    --slate-900: 15 23 42;
+    --slate-950: 2 6 23;
+
+    /* Page background - was a literal bg-[#0f0f17] everywhere, now variable-driven too */
+    --body-bg: 15 15 23;
+  }
+
+  /* Light theme: the slate ramp is reversed (950<->50, 900<->100, ...) so every existing
+     slate-based class - built for "light text on dark background" - renders correctly as
+     "dark text on light background" instead, with no changes needed at each call site. */
+  :root[data-theme="light"] {
+    --color-white: 15 23 42;
+    --slate-50: 2 6 23;
+    --slate-100: 15 23 42;
+    --slate-200: 30 41 59;
+    --slate-300: 51 65 85;
+    --slate-400: 71 85 105;
+    --slate-500: 100 116 139;
+    --slate-600: 148 163 184;
+    --slate-700: 203 213 225;
+    --slate-800: 226 232 240;
+    --slate-900: 241 245 249;
+    --slate-950: 248 250 252;
+
+    --body-bg: 248 250 252;
   }
 }
 
@@ -34,7 +74,7 @@
   }
 
   body {
-    @apply bg-[#0f0f17] text-foreground;
+    @apply bg-[rgb(var(--body-bg))] text-foreground;
     font-family: 'Inter', 'Ubuntu Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   }
 }

@@ -8,6 +8,27 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Overrides the entire slate scale + white to be CSS-variable driven, so every
+        // existing bg-slate-*/text-slate-*/border-slate-*/text-white usage across the app
+        // (the vast majority of its styling) automatically responds to the light/dark
+        // theme attribute without needing to touch each of those call sites individually.
+        // Dark (default) values are pixel-identical to Tailwind's stock slate/white so
+        // this is a no-op until the "light" theme attribute is applied - see
+        // tailwind-input.css for the variable definitions.
+        white: 'rgb(var(--color-white) / <alpha-value>)',
+        slate: {
+          50: 'rgb(var(--slate-50) / <alpha-value>)',
+          100: 'rgb(var(--slate-100) / <alpha-value>)',
+          200: 'rgb(var(--slate-200) / <alpha-value>)',
+          300: 'rgb(var(--slate-300) / <alpha-value>)',
+          400: 'rgb(var(--slate-400) / <alpha-value>)',
+          500: 'rgb(var(--slate-500) / <alpha-value>)',
+          600: 'rgb(var(--slate-600) / <alpha-value>)',
+          700: 'rgb(var(--slate-700) / <alpha-value>)',
+          800: 'rgb(var(--slate-800) / <alpha-value>)',
+          900: 'rgb(var(--slate-900) / <alpha-value>)',
+          950: 'rgb(var(--slate-950) / <alpha-value>)',
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
