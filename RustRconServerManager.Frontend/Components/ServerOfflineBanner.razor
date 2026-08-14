@@ -31,8 +31,13 @@
     protected override async Task OnInitializedAsync()
     {
         ServerStateService.OnConnectionStatusChanged += HandleConnectionStatusChanged;
+        ServerStateService.OnServerChanged += HandleServerChanged;
 
-        // Only start monitoring if a server is selected
+        // Only start monitoring if a server is already selected. If none is selected yet
+        // (e.g. a brand-new account with no servers), monitoring starts later via
+        // HandleServerChanged, once a server is actually added/selected - otherwise it
+        // would never start for the rest of this session, since this only runs once per
+        // layout construction.
         var serverId = await ServerStateService.GetSelectedServerIdAsync();
         if (serverId.HasValue && serverId.Value > 0)
         {
@@ -42,6 +47,19 @@
 
     private void HandleConnectionStatusChanged()
     {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleServerChanged()
+    {
+        // (Re)start monitoring whenever the selected server changes - covers both a
+        // server being selected for the first time in this session, and switching
+        // between servers. Safe to call repeatedly: it stops any existing timer first.
+        if (ServerStateService.HasServerSelected)
+        {
+            ServerStateService.StartConnectionMonitoring();
+        }
+
         InvokeAsync(StateHasChanged);
     }
 
@@ -58,5 +76,6 @@
     public void Dispose()
     {
         ServerStateService.OnConnectionStatusChanged -= HandleConnectionStatusChanged;
+        ServerStateService.OnServerChanged -= HandleServerChanged;
     }
 }
