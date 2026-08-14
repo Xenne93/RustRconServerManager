@@ -242,6 +242,62 @@
                     }
                 </div>
             </TwCard>
+
+            <!-- Steam API Key Card -->
+            <TwCard HeaderTitle="Steam API Key" HeaderIcon="fas fa-key">
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3 rounded-lg bg-blue-500/5 border border-blue-500/20 px-4 py-3">
+                        <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                        <p class="text-sm text-slate-300">Used for player profile and VAC-ban lookups (Server Protection, player inspect). Get a free key at <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener" class="text-orange-400 underline">steamcommunity.com/dev/apikey</a>. Overrides the <code>STEAM_API_KEY</code> environment variable when set here.</p>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-slate-300">Status</span>
+                        @if (steamApiKeyConfigured)
+                        {
+                            <span class="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400">Configured</span>
+                        }
+                        else
+                        {
+                            <span class="px-2 py-0.5 text-xs rounded-full bg-slate-500/20 text-slate-400">Not configured</span>
+                        }
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Steam API Key</label>
+                        <input type="password" @bind="steamApiKeyInput" @bind:event="oninput"
+                               class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                               placeholder="@(steamApiKeyConfigured ? "Leave empty to keep current key" : "Enter your Steam API key")" />
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                                @onclick="SaveSteamApiKey" disabled="@(steamApiKeySaving || string.IsNullOrWhiteSpace(steamApiKeyInput))">
+                            @if (steamApiKeySaving)
+                            {
+                                <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                            }
+                            <i class="fas fa-save mr-1.5"></i>Save
+                        </button>
+                        @if (steamApiKeyConfigured)
+                        {
+                            <button class="border border-red-500/30 text-red-400 hover:bg-red-500/10 font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                                    @onclick="RemoveSteamApiKey" disabled="@steamApiKeySaving">
+                                <i class="fas fa-trash-alt mr-1.5"></i>Remove
+                            </button>
+                        }
+                    </div>
+
+                    @if (steamApiKeyError != null)
+                    {
+                        <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@steamApiKeyError</div>
+                    }
+                    @if (!string.IsNullOrEmpty(steamApiKeySuccessMessage))
+                    {
+                        <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2 text-sm">@steamApiKeySuccessMessage</div>
+                    }
+                </div>
+            </TwCard>
             <!-- Anonymous Analytics Card -->
             <TwCard HeaderTitle="Anonymous Usage Statistics" HeaderIcon="fas fa-chart-simple">
                 <div class="space-y-4">
@@ -461,6 +517,13 @@
     private string? autoUpdateError;
     private string autoUpdateSuccessMessage = "";
 
+    // Steam API key state
+    private bool steamApiKeyConfigured = false;
+    private string steamApiKeyInput = "";
+    private bool steamApiKeySaving = false;
+    private string? steamApiKeyError;
+    private string steamApiKeySuccessMessage = "";
+
     // Analytics state
     private bool analyticsEnabled = false;
     private bool analyticsSaving = false;
@@ -652,6 +715,7 @@
                     autoUpdateEnabled = settings.AutoUpdateEnabled;
                     developerModeEnabled = settings.DeveloperModeEnabled;
                     analyticsEnabled = settings.AnalyticsEnabled;
+                    steamApiKeyConfigured = settings.SteamApiKeyConfigured;
                 }
             }
         }
@@ -720,6 +784,72 @@
         finally
         {
             autoUpdateSaving = false;
+        }
+    }
+
+    private async Task SaveSteamApiKey()
+    {
+        steamApiKeySaving = true;
+        steamApiKeyError = null;
+        steamApiKeySuccessMessage = "";
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync("/api/panelsettings/steam-api-key", new SetSteamApiKeyDto { SteamApiKey = steamApiKeyInput });
+
+            if (response.IsSuccessStatusCode)
+            {
+                steamApiKeyInput = "";
+                steamApiKeyConfigured = true;
+                steamApiKeySuccessMessage = "Steam API key saved.";
+                _ = Task.Delay(3000).ContinueWith(_ => { steamApiKeySuccessMessage = ""; InvokeAsync(StateHasChanged); });
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                steamApiKeyError = $"Failed to save Steam API key: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            steamApiKeyError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            steamApiKeySaving = false;
+        }
+    }
+
+    private async Task RemoveSteamApiKey()
+    {
+        steamApiKeySaving = true;
+        steamApiKeyError = null;
+        steamApiKeySuccessMessage = "";
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync("/api/panelsettings/steam-api-key", new SetSteamApiKeyDto { RemoveKey = true });
+
+            if (response.IsSuccessStatusCode)
+            {
+                steamApiKeyInput = "";
+                steamApiKeyConfigured = false;
+                steamApiKeySuccessMessage = "Steam API key removed.";
+                _ = Task.Delay(3000).ContinueWith(_ => { steamApiKeySuccessMessage = ""; InvokeAsync(StateHasChanged); });
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                steamApiKeyError = $"Failed to remove Steam API key: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            steamApiKeyError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            steamApiKeySaving = false;
         }
     }
 

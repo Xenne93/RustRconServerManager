@@ -13,9 +13,11 @@ namespace RustRconServerManager.Backend.Services;
 public class SteamApiService : ISteamApiService
 {
     private readonly HttpClient _httpClient;
-    private readonly string _apiKey;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<SteamApiService> _logger;
     private readonly AppDbContext _dbContext;
+    private readonly IRconPasswordsCryptoService _cryptoService;
+    private string? _cachedApiKey;
 
     private const string SteamApiBaseUrl = "https://api.steampowered.com";
     private const string GetPlayerSummariesEndpoint = "ISteamUser/GetPlayerSummaries/v0002";
@@ -27,12 +29,49 @@ public class SteamApiService : ISteamApiService
         HttpClient httpClient,
         IConfiguration configuration,
         ILogger<SteamApiService> logger,
-        AppDbContext dbContext)
+        AppDbContext dbContext,
+        IRconPasswordsCryptoService cryptoService)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _apiKey = configuration["SteamApi:ApiKey"] ?? throw new InvalidOperationException("Steam API key not configured");
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+        _cryptoService = cryptoService ?? throw new ArgumentNullException(nameof(cryptoService));
+    }
+
+    /// <summary>
+    /// Resolves the Steam API key to use - a key configured via the Panel Settings page
+    /// (stored encrypted in PanelSettings.SteamApiKeyEncrypted) takes priority over the
+    /// SteamApi:ApiKey config/env var, so existing env-var-based setups keep working until
+    /// an admin overrides it here. Cached per instance (this service is resolved fresh per
+    /// scope, so a changed key takes effect on the next request/background-service tick,
+    /// not immediately mid-scope). Returns null if neither is configured.
+    /// </summary>
+    private async Task<string?> GetApiKeyAsync()
+    {
+        if (_cachedApiKey != null) return _cachedApiKey;
+
+        var panelSettings = await _dbContext.PanelSettings.FirstOrDefaultAsync();
+        if (!string.IsNullOrEmpty(panelSettings?.SteamApiKeyEncrypted))
+        {
+            try
+            {
+                _cachedApiKey = _cryptoService.Decrypt(panelSettings.SteamApiKeyEncrypted);
+                return _cachedApiKey;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to decrypt stored Steam API key - falling back to configuration");
+            }
+        }
+
+        var configuredKey = _configuration["SteamApi:ApiKey"];
+        if (!string.IsNullOrWhiteSpace(configuredKey))
+        {
+            _cachedApiKey = configuredKey;
+        }
+
+        return _cachedApiKey;
     }
 
     /// <summary>
@@ -46,9 +85,16 @@ public class SteamApiService : ISteamApiService
             return null;
         }
 
+        var apiKey = await GetApiKeyAsync();
+        if (apiKey == null)
+        {
+            _logger.LogWarning("Steam API key not configured - skipping country lookup for Steam ID {SteamId}", steamId);
+            return null;
+        }
+
         try
         {
-            var url = $"{SteamApiBaseUrl}/{GetPlayerSummariesEndpoint}?key={_apiKey}&steamids={steamId}";
+            var url = $"{SteamApiBaseUrl}/{GetPlayerSummariesEndpoint}?key={apiKey}&steamids={steamId}";
 
             var response = await _httpClient.GetAsync(url);
 
@@ -133,9 +179,16 @@ public class SteamApiService : ISteamApiService
             }
         }
 
+        var apiKey = await GetApiKeyAsync();
+        if (apiKey == null)
+        {
+            _logger.LogWarning("Steam API key not configured - skipping VAC ban lookup for Steam ID {SteamId}", steamId);
+            return null;
+        }
+
         try
         {
-            var url = $"{SteamApiBaseUrl}/{GetPlayerBansEndpoint}?key={_apiKey}&steamids={steamId}";
+            var url = $"{SteamApiBaseUrl}/{GetPlayerBansEndpoint}?key={apiKey}&steamids={steamId}";
 
             var response = await _httpClient.GetAsync(url);
 
@@ -211,9 +264,16 @@ public class SteamApiService : ISteamApiService
             return null;
         }
 
+        var apiKey = await GetApiKeyAsync();
+        if (apiKey == null)
+        {
+            _logger.LogWarning("Steam API key not configured - skipping avatar lookup for Steam ID {SteamId}", steamId);
+            return null;
+        }
+
         try
         {
-            var url = $"{SteamApiBaseUrl}/{GetPlayerSummariesEndpoint}?key={_apiKey}&steamids={steamId}";
+            var url = $"{SteamApiBaseUrl}/{GetPlayerSummariesEndpoint}?key={apiKey}&steamids={steamId}";
 
             var response = await _httpClient.GetAsync(url);
 
@@ -295,6 +355,13 @@ public class SteamApiService : ISteamApiService
             return null;
         }
 
+        var apiKey = await GetApiKeyAsync();
+        if (apiKey == null)
+        {
+            _logger.LogWarning("Steam API key not configured - skipping Steam info lookup for Steam ID {SteamId}", steamId);
+            return null;
+        }
+
         try
         {
             DateTime? accountCreated = null;
@@ -302,7 +369,7 @@ public class SteamApiService : ISteamApiService
             int? rustPlaytimeMinutes = null;
 
             // Step 1: Get account creation date and profile visibility from GetPlayerSummaries
-            var summariesUrl = $"{SteamApiBaseUrl}/{GetPlayerSummariesEndpoint}?key={_apiKey}&steamids={steamId}";
+            var summariesUrl = $"{SteamApiBaseUrl}/{GetPlayerSummariesEndpoint}?key={apiKey}&steamids={steamId}";
             var summariesResponse = await _httpClient.GetAsync(summariesUrl);
 
             if (summariesResponse.IsSuccessStatusCode)
@@ -337,7 +404,7 @@ public class SteamApiService : ISteamApiService
             // Step 2: Get Rust playtime from GetOwnedGames (only if profile is public)
             if (profileVisibility == 3) // Public profile
             {
-                var gamesUrl = $"{SteamApiBaseUrl}/{GetOwnedGamesEndpoint}?key={_apiKey}&steamid={steamId}&include_played_free_games=1&appids_filter[0]={RustAppId}";
+                var gamesUrl = $"{SteamApiBaseUrl}/{GetOwnedGamesEndpoint}?key={apiKey}&steamid={steamId}&include_played_free_games=1&appids_filter[0]={RustAppId}";
                 var gamesResponse = await _httpClient.GetAsync(gamesUrl);
 
                 if (gamesResponse.IsSuccessStatusCode)
