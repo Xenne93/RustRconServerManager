@@ -3,7 +3,11 @@
 @using RustRconServerManager.Frontend.Components
 @using RustRconServerManager.Frontend.Components.Footer
 @using Microsoft.AspNetCore.Components
+@using System.Net.Http.Json
+@using RustRconServerManager.Shared.Scheduler
 @inject NavigationManager NavigationManager
+@inject HttpClient Http
+@inject IJSRuntime JS
 
 <div class="min-h-screen bg-[rgb(var(--body-bg))] flex flex-col">
     @* Top Navbar *@
@@ -31,5 +35,23 @@
     private void ToggleMobileSidebar()
     {
         MobileSidebarOpen = !MobileSidebarOpen;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var status = await Http.GetFromJsonAsync<AnalyticsStatusDto>("/api/panelsettings/analytics-status");
+            if (status == null || !status.Enabled) return;
+
+            var snapshot = await Http.GetFromJsonAsync<AnalyticsSnapshotDto>("/api/panelsettings/analytics-snapshot");
+            if (snapshot == null) return;
+
+            await JS.InvokeVoidAsync("sendAnalyticsSnapshot", snapshot.Players, snapshot.Servers, snapshot.Users);
+        }
+        catch
+        {
+            // Best-effort telemetry - never let a failure here affect the app.
+        }
     }
 }

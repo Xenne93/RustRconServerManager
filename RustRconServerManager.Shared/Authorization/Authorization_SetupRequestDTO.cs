@@ -11,4 +11,11 @@ public class Authorization_SetupRequestDTO
     /// so it can be linked to the admin account once it's created.
     /// </summary>
     public int? ConsentId { get; set; }
+
+    /// <summary>
+    /// Whether the admin opted in to sending anonymous usage statistics (install
+    /// check-ins, server/player/user counts - no personally identifiable data) during
+    /// setup. Seeds PanelSettings.AnalyticsEnabled; adjustable later from Panel Settings.
+    /// </summary>
+    public bool EnableAnonymousAnalytics { get; set; }
 }

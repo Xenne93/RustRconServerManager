@@ -325,6 +325,82 @@ public class PanelSettingsController : ControllerBase
     }
 
     /// <summary>
+    /// Updates whether this installation sends anonymous usage statistics (install
+    /// check-ins, server/player/user counts) to the developer.
+    /// </summary>
+    [HttpPut("analytics")]
+    public async Task<ActionResult<PanelSettingsDto>> SetAnalytics([FromBody] SetAnalyticsDto dto)
+    {
+        try
+        {
+            var currentUser = await User.GetUser(_dbContext);
+            if (!currentUser.isAdmin)
+                return Forbid();
+
+            var panelSettings = await _dbContext.PanelSettings
+                .FirstOrDefaultAsync(ps => ps.SystemProfileId == currentUser.SystemProfileId);
+
+            if (panelSettings == null)
+                return NotFound("Panel settings not found");
+
+            panelSettings.AnalyticsEnabled = dto.AnalyticsEnabled;
+            panelSettings.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("[PanelSettingsController] Anonymous analytics {State} by {User}",
+                dto.AnalyticsEnabled ? "enabled" : "disabled", currentUser.Email);
+
+            return Ok(MapToDto(panelSettings));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PanelSettingsController] Error setting analytics");
+            return StatusCode(500, new { error = "Error updating analytics setting" });
+        }
+    }
+
+    /// <summary>
+    /// Public, unauthenticated check for whether this installation has opted in to
+    /// anonymous analytics - the frontend calls this on every page load (before login is
+    /// even possible) to decide whether to load the analytics script, so toggling the
+    /// setting takes effect immediately without a rebuild or restart. Self-hosted installs
+    /// have exactly one SystemProfile/PanelSettings row, so the first one is authoritative.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("analytics-status")]
+    public async Task<ActionResult<AnalyticsStatusDto>> GetAnalyticsStatus()
+    {
+        var enabled = await _dbContext.PanelSettings.Select(ps => ps.AnalyticsEnabled).FirstOrDefaultAsync();
+        return Ok(new AnalyticsStatusDto { Enabled = enabled });
+    }
+
+    /// <summary>
+    /// Server/player/user counts sent as a custom analytics event - only ever called by
+    /// the frontend when analytics is enabled. No SteamIDs, emails, or other identifiable
+    /// data - just counts.
+    /// </summary>
+    [HttpGet("analytics-snapshot")]
+    public async Task<ActionResult<AnalyticsSnapshotDto>> GetAnalyticsSnapshot()
+    {
+        var currentUser = await User.GetUser(_dbContext);
+
+        var serverIds = await _dbContext.RconServers
+            .Where(s => s.SystemProfileId == currentUser.SystemProfileId)
+            .Select(s => s.Id)
+            .ToListAsync();
+
+        var playerCount = await _dbContext.SteamPlayers.Where(p => serverIds.Contains(p.ServerId)).CountAsync();
+        var userCount = await _dbContext.Users.Where(u => u.SystemProfileId == currentUser.SystemProfileId).CountAsync();
+
+        return Ok(new AnalyticsSnapshotDto
+        {
+            Servers = serverIds.Count,
+            Players = playerCount,
+            Users = userCount
+        });
+    }
+
+    /// <summary>
     /// Lists all developer-mode fake VAC-ban overrides.
     /// </summary>
     [HttpGet("developer/vac-overrides")]
@@ -457,6 +533,7 @@ public class PanelSettingsController : ControllerBase
             MinimumLogLevel = panelSettings.MinimumLogLevel,
             AutoUpdateEnabled = panelSettings.AutoUpdateEnabled,
             DeveloperModeEnabled = panelSettings.DeveloperModeEnabled,
+            AnalyticsEnabled = panelSettings.AnalyticsEnabled,
             CreatedAt = panelSettings.CreatedAt,
             UpdatedAt = panelSettings.UpdatedAt
         };
