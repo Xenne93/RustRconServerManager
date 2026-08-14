@@ -55,6 +55,12 @@ above, permitting limited production use.
 Effective on the Change Date stated above, the Licensor hereby grants you rights under the terms
 of the Change License, and the rights granted in the paragraph above terminate.
 
+The Licensor may adjust the Change Date stated above at its sole discretion - postponing or
+bringing it forward - by publishing a revised version of this License. Any such adjustment takes
+effect from the date the revised License is published; it does not revoke or reduce rights
+already vested for a version of the Licensed Work that converted to the Change License before the
+revision was published.
+
 If your use of the Licensed Work does not comply with the requirements currently in effect as
 described in this License, you must purchase a commercial license from the Licensor, its
 affiliated entities, or authorized resellers, or you must refrain from using the Licensed Work.
@@ -93,7 +99,8 @@ Note: this License is adapted from the Business Source License 1.1 template. It 
 source-available license, not a standard OSI-approved open source license - it restricts using
 the Licensed Work as a competing hosted service unless you have a commercial agreement with the
 Licensor, and it requires attribution back to the original project. Unlike the original BSL 1.1
-template, the Change Date above is fixed and does not shift earlier based on when any particular
-version was first published. This document is a starting point, not vetted legal text - have it
+template, the Change Date above does not automatically shift earlier based on when any particular
+version was first published - it only changes if the Licensor explicitly publishes a revised
+License with a new date. This document is a starting point, not vetted legal text - have it
 reviewed by a lawyer before relying on it commercially, and fill in "Xenne" above with your actual
 legal name or entity if different.
