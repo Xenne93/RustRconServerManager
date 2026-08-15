@@ -6,6 +6,7 @@ using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
 using RustRconServerManager.Backend.Interfaces;
 using RustRconServerManager.Backend.Models;
+using RustRconServerManager.Backend.Services;
 
 namespace RustRconServerManager.Backend.SignalRHubs;
 
@@ -21,6 +22,7 @@ public class LiveConsoleHub : Hub
     private readonly AppDbContext _database;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRconBackgroundService _rconBackgroundService;
+    private readonly IAuditLogService _auditLogService;
     private readonly ILogger<LiveConsoleHub> _logger;
 
     // Eén vaste prefix voor alle SignalR groups
@@ -29,11 +31,12 @@ public class LiveConsoleHub : Hub
     // Key om in Context.Items op te slaan welke server-id deze verbinding gebruikt
     private const string ConnectionServerKey = "activeServerId";
 
-    public LiveConsoleHub(AppDbContext database, IServiceScopeFactory scopeFactory, IRconBackgroundService backgroundService, ILogger<LiveConsoleHub> logger) : base()
+    public LiveConsoleHub(AppDbContext database, IServiceScopeFactory scopeFactory, IRconBackgroundService backgroundService, IAuditLogService auditLogService, ILogger<LiveConsoleHub> logger) : base()
     {
         _database = database;
         _scopeFactory = scopeFactory;
         _rconBackgroundService = backgroundService;
+        _auditLogService = auditLogService;
         _logger = logger;
     }
 
@@ -73,6 +76,23 @@ public class LiveConsoleHub : Hub
 
         var (currentServerId, _) = await GetCurrentUserSelectedServerAsync(CancellationToken.None);
         _rconBackgroundService.SendRconCommand(command, currentServerId);
+
+        // Console/preset commands run over SignalR, which MVC action filters never see (see
+        // AuditLogActionFilter), so this is the one path that has to log itself directly.
+        try
+        {
+            var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var user = !string.IsNullOrEmpty(userId) ? await _database.Users.FindAsync(userId) : null;
+            if (user != null)
+            {
+                var ipAddress = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                await _auditLogService.LogAsync(user, currentServerId, "Console command", command, ipAddress);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[LiveConsoleHub] Failed to record audit log entry for console command");
+        }
     }
     
     [HubMethodName("ReceiveConsole")]

@@ -153,6 +153,9 @@
                                 <TwDropdownItem Href="@NavHelper.GetUrl("panelsettings")">
                                     <i class="fas fa-cog text-xs mr-2"></i>Panel Settings
                                 </TwDropdownItem>
+                                <TwDropdownItem Href="@NavHelper.GetUrl("audit-log")">
+                                    <i class="fas fa-clipboard-list text-xs mr-2"></i>Audit Log
+                                </TwDropdownItem>
                             }
                             <TwDropdownSeparator />
                             <TwDropdownItem IsDanger="true" OnClick="@(async _ => await Logout())">
