@@ -25,6 +25,12 @@ public partial class RconBackgroundService : BackgroundService, IRconBackgroundS
     private readonly double _heavyUpdateInterval = 60.0; // Tickrate in seconds for heavy periodic actions (StatsHistory, etc.)
     private readonly double _cleanupInterval = 3600.0; // Cleanup interval in seconds (1 hour)
 
+    // Bans/unbans made in-game (not via the panel) are only ever detected by polling - Rust's
+    // RCON console doesn't broadcast a ban/unban event the way it does for chat/kills/joins, so
+    // there's no live-event path available here. Runs on its own faster interval, decoupled from
+    // the light loop above, since ban state matters more for moderation than FPS/ports/hostname.
+    private readonly double _banlistUpdateInterval = 10.0;
+
     // How often to check if hourly aggregation is needed (in seconds).
     // Note: This does NOT determine the aggregation granularity - stats are always aggregated into HOURLY buckets.
     // Running frequently ensures we don't miss aggregating an hour if the service restarts.
@@ -79,6 +85,9 @@ public partial class RconBackgroundService : BackgroundService, IRconBackgroundS
 
         // Start the heavy operations loop in parallel
         _ = Task.Run(async () => await HeavyOperationsLoopAsync(stoppingToken), stoppingToken);
+
+        // Start the ban list loop in parallel (faster than the light loop - see _banlistUpdateInterval)
+        _ = Task.Run(async () => await BanlistLoopAsync(stoppingToken), stoppingToken);
 
         // Start the cleanup loop in parallel
         _ = Task.Run(async () => await CleanupLoopAsync(stoppingToken), stoppingToken);

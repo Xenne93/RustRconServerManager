@@ -30,11 +30,57 @@ public partial class RconBackgroundService : BackgroundService, IRconBackgroundS
         GetServerHostname hostname = new GetServerHostname();
         FireAndForget(() => hostname.ExecuteAsync(client));
 
-        GetServerBanList banlist = new GetServerBanList();
-        FireAndForget(() => banlist.ExecuteAsync(client));
-
         // Mark players offline if they haven't been seen in 30+ seconds
         await MarkOfflinePlayersAsync(client.ServerId);
+    }
+
+    /// <summary>
+    /// Ban list grabber - runs on its own faster loop (_banlistUpdateInterval) since in-game
+    /// bans/unbans can only ever be detected by polling (see BanlistLoopAsync).
+    /// </summary>
+    public Task GetBanlistData(RconClient client)
+    {
+        GetServerBanList banlist = new GetServerBanList();
+        FireAndForget(() => banlist.ExecuteAsync(client));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Ban list polling loop - decoupled from the light loop and runs on a faster interval,
+    /// since ban/unban state matters more for moderation than FPS/ports/hostname.
+    /// </summary>
+    private async Task BanlistLoopAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("[RconBackgroundService] Ban list loop starting...");
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(_banlistUpdateInterval), stoppingToken);
+                _logger.LogDebug("[RconBackgroundService] Ban list check running...");
+
+                foreach (var kvp in _rconConnectionManager.GetAllClients())
+                {
+                    var client = kvp.Value;
+                    if (client.IsConnected)
+                    {
+                        FireAndForget(() => GetBanlistData(client));
+                    }
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                _logger.LogInformation("[RconBackgroundService] Ban list loop cancelled.");
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[RconBackgroundService] Unexpected error during ban list check.");
+            }
+        }
+
+        _logger.LogInformation("[RconBackgroundService] Ban list loop stopped.");
     }
 
     /// <summary>
