@@ -17,12 +17,18 @@
             </div>
         </div>
 
-        <div class="mb-4">
-            <PresetCommandsPanel OnExecuteCommand="ExecutePresetCommand" />
-        </div>
+        @* Mobile: preset commands stacked above the console (unchanged). Desktop (lg+):
+           row-reverse flips the visual order so the console (2nd in markup) renders on
+           the left and presets (1st in markup, unchanged position) render on the right,
+           without changing DOM/tab order or the mobile layout at all. *@
+        <div class="flex flex-col lg:flex-row-reverse gap-4 mb-4 lg:mb-0">
+            <div class="lg:w-80 lg:flex-shrink-0">
+                <PresetCommandsPanel OnExecuteCommand="ExecutePresetCommand" />
+            </div>
 
-        <div style="height: calc(100vh - 300px); min-height: 400px;">
-            <ConsoleCard @ref="consoleCardRef" Height="100%" />
+            <div class="flex-1 min-w-0" style="height: calc(100vh - 300px); min-height: 400px;">
+                <ConsoleCard @ref="consoleCardRef" Height="100%" />
+            </div>
         </div>
     </ContentWrapper>
 </PageAccessGuard>
