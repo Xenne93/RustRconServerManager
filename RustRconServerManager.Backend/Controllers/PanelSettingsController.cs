@@ -132,6 +132,12 @@ public class PanelSettingsController : ControllerBase
             var playerOldest = await _dbContext.SteamPlayers.Where(p => serverIds.Contains(p.ServerId)).OrderBy(p => p.FirstSeen).Select(p => (DateTime?)p.FirstSeen).FirstOrDefaultAsync();
             entries.Add(new DatabaseStatEntry { Category = "Players", Icon = "fas fa-users", Count = playerCount, OldestRecord = playerOldest, CanPurge = false });
 
+            // Audit Log
+            var auditQuery = _dbContext.AuditLogs.Where(a => a.ServerId == null || serverIds.Contains(a.ServerId.Value));
+            var auditCount = await auditQuery.LongCountAsync();
+            var auditOldest = await auditQuery.OrderBy(a => a.CreatedAt).Select(a => (DateTime?)a.CreatedAt).FirstOrDefaultAsync();
+            entries.Add(new DatabaseStatEntry { Category = "AuditLogs", Icon = "fas fa-clipboard-list", Count = auditCount, OldestRecord = auditOldest, CanPurge = true });
+
             return Ok(new DatabaseStatsDto { Entries = entries });
         }
         catch (Exception ex)
@@ -195,6 +201,12 @@ public class PanelSettingsController : ControllerBase
                 case "KillLogs":
                     deleted = await _dbContext.PlayerKillLogs
                         .Where(k => serverIds.Contains(k.ServerId) && k.CreatedAt < cutoff)
+                        .ExecuteDeleteAsync();
+                    break;
+
+                case "AuditLogs":
+                    deleted = await _dbContext.AuditLogs
+                        .Where(a => (a.ServerId == null || serverIds.Contains(a.ServerId.Value)) && a.CreatedAt < cutoff)
                         .ExecuteDeleteAsync();
                     break;
 

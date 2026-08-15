@@ -1,0 +1,214 @@
+@page "/audit-log"
+@using Microsoft.AspNetCore.Authorization
+@using System.Net.Http.Json
+@using System.Text.Json
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Shared.AuditLog
+@using RustRconServerManager.Shared.ManageServers
+@inject HttpClient Http
+
+@attribute [Authorize]
+
+<ContentWrapper>
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+        <div>
+            <h3 class="text-xl font-semibold text-white">Audit Log</h3>
+            <p class="text-slate-400 text-sm mt-1">Every action taken by an admin or moderator - RCON commands, server/preset changes, permission changes, and more</p>
+        </div>
+        <button class="tw-btn-secondary text-sm" @onclick="() => LoadEntries(1)">
+            <i class="fas fa-rotate mr-1.5"></i>Refresh
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Server</label>
+            <select class="tw-input text-sm" @bind="filterServerId" @bind:after="() => LoadEntries(1)">
+                <option value="">All servers</option>
+                @foreach (var server in servers)
+                {
+                    <option value="@server.ServerId">@server.ServerName</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Role</label>
+            <select class="tw-input text-sm" @bind="filterRole" @bind:after="() => LoadEntries(1)">
+                <option value="">All roles</option>
+                <option value="Admin">Admin</option>
+                <option value="Moderator">Moderator</option>
+            </select>
+        </div>
+        <div class="md:col-span-2">
+            <label class="block text-xs font-medium text-slate-400 mb-1">Search (user, action, details)</label>
+            <input type="text" class="tw-input text-sm" placeholder="e.g. kick, admin@example.com..."
+                   @bind="filterSearch" @bind:event="oninput" @bind:after="DebouncedSearch" />
+        </div>
+    </div>
+
+    <TwCard HeaderTitle="Actions" HeaderIcon="fas fa-clipboard-list">
+        <ChildContent>
+            @if (isLoading)
+            {
+                <div class="flex items-center justify-center py-8">
+                    <div class="tw-spinner"></div>
+                    <span class="text-slate-400 text-sm ml-3">Loading audit log...</span>
+                </div>
+            }
+            else if (loadError != null)
+            {
+                <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
+                    <i class="fas fa-exclamation-circle mr-2"></i>@loadError
+                </div>
+            }
+            else if (result == null || result.Entries.Count == 0)
+            {
+                <div class="text-center py-8 text-slate-500">
+                    <i class="fas fa-clipboard-list text-2xl mb-2 block"></i>
+                    <p>No matching actions recorded yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="overflow-x-auto">
+                    <table class="tw-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Server</th>
+                                <th>Action</th>
+                                <th>Details</th>
+                                <th>IP</th>
+                                <th class="text-right">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in result.Entries)
+                            {
+                                <tr>
+                                    <td class="text-slate-400 text-xs whitespace-nowrap">@entry.CreatedAt.ToLocalTime().ToString("dd-MM-yyyy HH:mm:ss")</td>
+                                    <td class="text-white text-sm">@entry.UserEmail</td>
+                                    <td>
+                                        <TwBadge Variant="@(entry.Role == "Admin" ? "info" : "default")">@entry.Role</TwBadge>
+                                    </td>
+                                    <td class="text-slate-300 text-sm">@(entry.ServerName ?? "—")</td>
+                                    <td class="text-slate-300 text-xs font-mono">@entry.Action</td>
+                                    <td class="text-slate-400 text-xs max-w-xs truncate" title="@entry.Details">@(entry.Details ?? "—")</td>
+                                    <td class="text-slate-500 text-xs">@entry.IpAddress</td>
+                                    <td class="text-right">
+                                        @if (entry.StatusCode.HasValue)
+                                        {
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium @(entry.StatusCode < 400 ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400")">
+                                                @entry.StatusCode
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-slate-600 text-xs">—</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex items-center justify-between mt-4 text-sm">
+                    <p class="text-slate-500">
+                        Showing @(((result.Page - 1) * result.PageSize) + 1)-@(Math.Min(result.Page * result.PageSize, result.TotalCount)) of @result.TotalCount
+                    </p>
+                    <div class="flex gap-2">
+                        <button class="tw-btn-secondary tw-btn-sm" disabled="@(result.Page <= 1)" @onclick="() => LoadEntries(result.Page - 1)">
+                            <i class="fas fa-chevron-left mr-1"></i>Previous
+                        </button>
+                        <button class="tw-btn-secondary tw-btn-sm" disabled="@(result.Page * result.PageSize >= result.TotalCount)" @onclick="() => LoadEntries(result.Page + 1)">
+                            Next<i class="fas fa-chevron-right ml-1"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+        </ChildContent>
+    </TwCard>
+</ContentWrapper>
+
+@code {
+    private AuditLogPagedResultDto? result;
+    private bool isLoading = true;
+    private string? loadError;
+
+    private List<ManageServers_ServerListEntryDTO> servers = new();
+    private string filterServerId = "";
+    private string filterRole = "";
+    private string filterSearch = "";
+    private System.Timers.Timer? searchDebounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadServers();
+        await LoadEntries(1);
+    }
+
+    private async Task LoadServers()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/api/ManageServers/GetServerList");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                servers = JsonSerializer.Deserialize<List<ManageServers_ServerListEntryDTO>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading servers: {ex.Message}");
+        }
+    }
+
+    private void DebouncedSearch()
+    {
+        searchDebounceTimer?.Dispose();
+        searchDebounceTimer = new System.Timers.Timer(400) { AutoReset = false };
+        searchDebounceTimer.Elapsed += (_, _) => InvokeAsync(() => LoadEntries(1));
+        searchDebounceTimer.Start();
+    }
+
+    private async Task LoadEntries(int page)
+    {
+        try
+        {
+            isLoading = true;
+            loadError = null;
+
+            var query = $"/api/AuditLogs?page={page}&pageSize=50";
+            if (!string.IsNullOrWhiteSpace(filterServerId)) query += $"&serverId={Uri.EscapeDataString(filterServerId)}";
+            if (!string.IsNullOrWhiteSpace(filterRole)) query += $"&role={Uri.EscapeDataString(filterRole)}";
+            if (!string.IsNullOrWhiteSpace(filterSearch)) query += $"&search={Uri.EscapeDataString(filterSearch)}";
+
+            var response = await Http.GetAsync(query);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                result = JsonSerializer.Deserialize<AuditLogPagedResultDto>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                loadError = "Only admins can view the audit log.";
+            }
+            else
+            {
+                loadError = "Failed to load audit log.";
+            }
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Error loading audit log: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

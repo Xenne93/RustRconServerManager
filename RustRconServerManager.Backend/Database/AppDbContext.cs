@@ -15,6 +15,9 @@ namespace RustRconServerManager.Backend.Database
         
         // Database set for RCON servers
         public DbSet<RconServer> RconServers { get; set; }
+
+        // Database set for admin/moderator audit log entries
+        public DbSet<AuditLog> AuditLogs { get; set; }
         
         // Database set for the SystemProfiles
         public DbSet<SystemProfile> SystemProfiles { get; set; }

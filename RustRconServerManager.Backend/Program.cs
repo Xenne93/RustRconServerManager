@@ -29,7 +29,11 @@ builder.Logging.AddFilter((category, level) => level >= LogLevelState.Minimum);
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<RustRconServerManager.Backend.Filters.UserNotAuthenticatedExceptionFilter>();
+    options.Filters.Add<RustRconServerManager.Backend.Filters.AuditLogActionFilter>();
 });
+
+// Records every mutating action taken by an admin/moderator (see AuditLogActionFilter, AuditLogService)
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
