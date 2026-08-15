@@ -10,6 +10,8 @@
 
 <TwCard HeaderTitle="Preset Commands" HeaderIcon="fas fa-bolt">
     <HeaderActions>
+        <i class="fas fa-info-circle text-slate-500 hover:text-slate-300 cursor-help text-sm"
+           title="Define a variable in a command with {name}, or {name(type)} to pick its input: {name(text)} for free text, {name(number)} for a number, {name(bool)} for a checkbox. {player} is special - it always shows a player picker. Example: kick {player} {reason(text)}"></i>
         <button class="tw-btn-ghost tw-btn-icon h-7 w-7 text-slate-400 hover:text-white" title="Manage Presets" @onclick="OpenManageModal">
             <i class="fas fa-cog text-xs"></i>
         </button>
@@ -61,33 +63,43 @@
                 <code class="text-sm text-orange-300 font-mono">@executingPreset?.Command</code>
             </div>
 
-            @if (needsPlayer)
+            @foreach (var variable in executingVariables)
             {
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Player</label>
-                    <div class="flex items-center gap-2 mb-2">
-                        <select class="tw-input text-sm"
-                                @bind="selectedPlayerName">
-                            <option value="">Select a player...</option>
-                            @foreach (var player in GetFilteredPlayers())
-                            {
-                                <option value="@player.Name">@player.Name @(player.IsOnline ? "" : "(Offline)")</option>
-                            }
-                        </select>
-                    </div>
-                    <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                        <input type="checkbox" class="rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500/50" @bind="showOfflinePlayers" />
-                        Include offline players
-                    </label>
-                </div>
-            }
-
-            @if (needsAmount)
-            {
-                <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Amount</label>
-                    <input type="number" class="tw-input text-sm" placeholder="Enter amount..."
-                           @bind="amountValue" />
+                    @if (variable.Type == "player")
+                    {
+                        <label class="block text-sm font-medium text-slate-300 mb-1.5">Player</label>
+                        <div class="flex items-center gap-2 mb-2">
+                            <select class="tw-input text-sm" @bind="variable.Value">
+                                <option value="">Select a player...</option>
+                                @foreach (var player in GetFilteredPlayers())
+                                {
+                                    <option value="@player.Name">@player.Name @(player.IsOnline ? "" : "(Offline)")</option>
+                                }
+                            </select>
+                        </div>
+                        <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                            <input type="checkbox" class="rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500/50" @bind="showOfflinePlayers" />
+                            Include offline players
+                        </label>
+                    }
+                    else if (variable.Type == "number")
+                    {
+                        <label class="block text-sm font-medium text-slate-300 mb-1.5">@variable.DisplayName</label>
+                        <input type="number" class="tw-input text-sm" placeholder="Enter a number..." @bind="variable.Value" />
+                    }
+                    else if (variable.Type == "bool")
+                    {
+                        <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                            <input type="checkbox" class="rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500/50" @bind="variable.BoolValue" />
+                            @variable.DisplayName
+                        </label>
+                    }
+                    else
+                    {
+                        <label class="block text-sm font-medium text-slate-300 mb-1.5">@variable.DisplayName</label>
+                        <input type="text" class="tw-input text-sm" placeholder="Enter @(variable.DisplayName.ToLowerInvariant())..." @bind="variable.Value" />
+                    }
                 </div>
             }
         </div>
@@ -179,7 +191,9 @@
                     <input type="text" class="tw-input text-sm font-mono" placeholder='e.g. kick {player} "AFK"'
                            @bind="editForm.Command" />
                     <p class="text-xs text-slate-500 mt-1">
-                        Use <code class="text-orange-400">@("{player}")</code> for player selector and <code class="text-orange-400">@("{amount}")</code> for number input.
+                        Use <code class="text-orange-400">@("{player}")</code> for a player picker, or <code class="text-orange-400">@("{name(type)}")</code>
+                        for a custom variable - type is <code class="text-orange-400">text</code>, <code class="text-orange-400">number</code>, or <code class="text-orange-400">bool</code>.
+                        Example: <code class="text-orange-400">@("kick {player} {reason(text)}")</code>
                     </p>
                 </div>
                 <div>
@@ -252,13 +266,13 @@
     // Placeholder modal state
     private bool showPlaceholderModal;
     private PresetCommandDto? executingPreset;
-    private bool needsPlayer;
-    private bool needsAmount;
-    private string selectedPlayerName = string.Empty;
-    private int? amountValue;
+    private List<CommandVariable> executingVariables = new();
     private bool showOfflinePlayers;
     private PlayerList_PlayerListDTO? playerData;
     private bool isLoadingPlayers;
+
+    // Matches {name} or {name(type)} - e.g. {player}, {reason(text)}, {amount(number)}, {state(bool)}
+    private static readonly Regex VariablePattern = new(@"\{(\w+)(?:\(([a-zA-Z]+)\))?\}", RegexOptions.Compiled);
 
     // Manage modal state
     private bool showManageModal;
@@ -305,31 +319,70 @@
 
     private async Task HandlePresetClick(PresetCommandDto preset)
     {
-        var command = preset.Command;
-        var hasPlayer = command.Contains("{player}", StringComparison.OrdinalIgnoreCase);
-        var hasAmount = command.Contains("{amount}", StringComparison.OrdinalIgnoreCase);
+        var variables = ParseVariables(preset.Command);
 
-        if (!hasPlayer && !hasAmount)
+        if (variables.Count == 0)
         {
             // Execute immediately
-            await OnExecuteCommand.InvokeAsync(command);
+            await OnExecuteCommand.InvokeAsync(preset.Command);
             return;
         }
 
         // Show placeholder popup
         executingPreset = preset;
-        needsPlayer = hasPlayer;
-        needsAmount = hasAmount;
-        selectedPlayerName = string.Empty;
-        amountValue = null;
+        executingVariables = variables;
         showOfflinePlayers = false;
 
-        if (hasPlayer)
+        if (variables.Any(v => v.Type == "player"))
         {
             await LoadPlayers();
         }
 
         showPlaceholderModal = true;
+    }
+
+    /// <summary>
+    /// Parses {name} / {name(type)} tokens out of a command template. One entry per unique
+    /// variable name (in order of first appearance) - a name repeated later in the same
+    /// command reuses the same input rather than prompting twice. Defaulting for a bare
+    /// {name} with no explicit type: "player" -> the player picker, "amount" -> number (for
+    /// backward compatibility with presets saved before typed variables existed), anything
+    /// else -> text. An explicit but unrecognized type also falls back to text.
+    /// </summary>
+    private static List<CommandVariable> ParseVariables(string command)
+    {
+        var variables = new List<CommandVariable>();
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (Match match in VariablePattern.Matches(command))
+        {
+            var name = match.Groups[1].Value;
+            if (!seenNames.Add(name)) continue;
+
+            var explicitType = match.Groups[2].Success ? match.Groups[2].Value.ToLowerInvariant() : null;
+
+            string type;
+            if (explicitType is "text" or "number" or "bool")
+            {
+                type = explicitType;
+            }
+            else if (name.Equals("player", StringComparison.OrdinalIgnoreCase))
+            {
+                type = "player";
+            }
+            else if (name.Equals("amount", StringComparison.OrdinalIgnoreCase))
+            {
+                type = "number";
+            }
+            else
+            {
+                type = "text";
+            }
+
+            variables.Add(new CommandVariable { Name = name, Type = type });
+        }
+
+        return variables;
     }
 
     private async Task LoadPlayers()
@@ -371,8 +424,12 @@
 
     private bool CanExecute()
     {
-        if (needsPlayer && string.IsNullOrWhiteSpace(selectedPlayerName)) return false;
-        if (needsAmount && !amountValue.HasValue) return false;
+        foreach (var variable in executingVariables)
+        {
+            if (variable.Type == "bool") continue; // a checkbox is always in a valid state
+            if (variable.Type == "number" && !double.TryParse(variable.Value, out _)) return false;
+            if (string.IsNullOrWhiteSpace(variable.Value)) return false; // player and text both require a value
+        }
         return true;
     }
 
@@ -382,14 +439,13 @@
 
         var command = executingPreset.Command;
 
-        if (needsPlayer)
+        foreach (var variable in executingVariables)
         {
-            command = Regex.Replace(command, @"\{""?\{?player\}?""?\}", selectedPlayerName, RegexOptions.IgnoreCase);
-        }
-
-        if (needsAmount && amountValue.HasValue)
-        {
-            command = Regex.Replace(command, @"\{""?\{?amount\}?""?\}", amountValue.Value.ToString(), RegexOptions.IgnoreCase);
+            var replacement = variable.Type == "bool" ? (variable.BoolValue ? "true" : "false") : variable.Value;
+            var pattern = @"\{" + Regex.Escape(variable.Name) + @"(?:\([a-zA-Z]+\))?\}";
+            // MatchEvaluator, not a plain replacement string, so a value containing "$"
+            // (e.g. a $1-looking reason) is inserted literally instead of as a regex backreference.
+            command = Regex.Replace(command, pattern, _ => replacement, RegexOptions.IgnoreCase);
         }
 
         showPlaceholderModal = false;
@@ -530,5 +586,19 @@
         public string Description { get; set; } = string.Empty;
         public bool IsGlobal { get; set; }
         public int SortOrder { get; set; }
+    }
+
+    /// <summary>
+    /// One {name} / {name(type)} token parsed from a preset's command, plus the value the
+    /// admin fills in for it in the Configure Command modal. Type is "player" (special -
+    /// renders the player picker), "text", "number", or "bool".
+    /// </summary>
+    private class CommandVariable
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public string Value { get; set; } = string.Empty;
+        public bool BoolValue { get; set; }
+        public string DisplayName => System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(Name);
     }
 }
