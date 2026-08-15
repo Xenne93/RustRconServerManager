@@ -417,6 +417,19 @@ var indexHtmlContent = string.Empty;
     {
         indexHtmlContent = await File.ReadAllTextAsync(indexPath);
         app.Logger.LogInformation("[STARTUP] index.html loaded from {Path}", indexPath);
+
+        // Append a version-based cache-busting query string to the CSS links. These files
+        // keep the same URL across deployments, so - unlike index.html itself, which is
+        // never cached - a browser or intermediary proxy that doesn't revalidate strictly
+        // correctly against Cache-Control can still serve a stale cached copy after an
+        // update (reported as "some parts of the stylesheet don't load until a refresh").
+        // Changing the URL on every version forces a fresh fetch regardless of how any
+        // particular cache layer handles revalidation.
+        var versionFilePath = Path.Combine(app.Environment.ContentRootPath, ".version");
+        var cssVersion = File.Exists(versionFilePath) ? File.ReadAllText(versionFilePath).Trim() : "dev";
+        indexHtmlContent = indexHtmlContent
+            .Replace("/css/tailwind-output.css\"", $"/css/tailwind-output.css?v={cssVersion}\"")
+            .Replace("/css/app.css\"", $"/css/app.css?v={cssVersion}\"");
     }
     else
     {
