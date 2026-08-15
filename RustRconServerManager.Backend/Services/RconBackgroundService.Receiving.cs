@@ -272,6 +272,12 @@ public partial class RconBackgroundService : BackgroundService, IRconBackgroundS
         {
             _logger.LogError(ex, "[Server {ServerId}] BANLIST ERROR: Unable to parse server ban list", serverId);
         }
+        finally
+        {
+            // Let the next poll fire, regardless of how this one finished - see
+            // _banlistRequestInFlight and BanlistLoopAsync.
+            _banlistRequestInFlight.TryRemove(serverId, out _);
+        }
     }
 
     // Helper method to convert Unix timestamp to DateTime

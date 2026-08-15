@@ -65,7 +65,24 @@ public partial class RconBackgroundService : BackgroundService, IRconBackgroundS
                     var client = kvp.Value;
                     if (client.IsConnected)
                     {
-                        FireAndForget(() => GetBanlistData(client));
+                        // Skip this tick if the previous "bans" request for this server hasn't
+                        // had its response parsed yet - avoids overlapping/out-of-order
+                        // processing (see _banlistRequestInFlight) - unless that request is old
+                        // enough its response was likely lost entirely, in which case go ahead
+                        // rather than wedging polling for this server forever.
+                        var now = DateTime.UtcNow;
+                        bool previousStillInFlight = _banlistRequestInFlight.TryGetValue(client.ServerId, out var sentAt)
+                            && now - sentAt <= BanlistRequestStaleAfter;
+
+                        if (!previousStillInFlight)
+                        {
+                            _banlistRequestInFlight[client.ServerId] = now;
+                            FireAndForget(() => GetBanlistData(client));
+                        }
+                        else
+                        {
+                            _logger.LogDebug("[Server {ServerId}] BANLIST: Skipping poll - previous request still in flight", client.ServerId);
+                        }
                     }
                 }
             }

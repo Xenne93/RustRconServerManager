@@ -46,6 +46,19 @@ public partial class RconBackgroundService : BackgroundService, IRconBackgroundS
     // Track consecutive empty banlists to prevent accidental ban deletion
     private readonly ConcurrentDictionary<int, int> _consecutiveEmptyBanlists = new();
 
+    // Guards against overlapping "bans" requests for the same server: ExecuteCommand only sends
+    // the RCON message and returns immediately, the actual response is parsed later (and
+    // asynchronously) whenever it arrives - there's no correlation between request order and
+    // response-processing order. If one "bans" round-trip ever takes longer than the poll
+    // interval, firing another before the first's response is parsed could let a late, stale
+    // response overwrite a more current one (or spuriously nudge the empty-banlist counter with
+    // out-of-order data). Stores when the request was sent (not just a bool) so a response that
+    // never arrives at all - dropped connection, lost message - can't wedge polling for that
+    // server permanently; see BanlistRequestStaleAfter and BanlistLoopAsync. Cleared as soon as
+    // the response is parsed - see ParseServerBanList.
+    private readonly ConcurrentDictionary<int, DateTime> _banlistRequestInFlight = new();
+    private static readonly TimeSpan BanlistRequestStaleAfter = TimeSpan.FromSeconds(30);
+
     // Suppress player join/leave notifications during initial sync after (re)connect
     // When the service starts or reconnects, the first playerlist sync would trigger
     // notifications for ALL online players. This flag prevents that.
