@@ -512,7 +512,7 @@ public class PanelSettingsController : ControllerBase
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation("[PanelSettingsController] VAC-ban override upserted for SteamID {SteamId} by {UserId}",
-                steamId, currentUser.Id);
+                steamId.Replace("\r", "").Replace("\n", ""), currentUser.Id);
 
             return Ok(new DeveloperVacBanOverrideDto
             {
@@ -551,7 +551,7 @@ public class PanelSettingsController : ControllerBase
                 return NotFound("Override not found");
 
             _logger.LogInformation("[PanelSettingsController] VAC-ban override removed for SteamID {SteamId} by {UserId}",
-                steamId, currentUser.Id);
+                steamId.Replace("\r", "").Replace("\n", ""), currentUser.Id);
 
             return Ok();
         }
