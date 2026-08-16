@@ -252,12 +252,12 @@ public partial class RconBackgroundService
             }
 
             // Timeout - no response received
-            _logger.LogWarning("[ExecuteCommandWithResponse] Timeout waiting for response from server {ServerId} for command {Command}", serverId, command);
+            _logger.LogWarning("[ExecuteCommandWithResponse] Timeout waiting for response from server {ServerId} for command {Command}", serverId, command?.Replace("\r", "").Replace("\n", ""));
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[ExecuteCommandWithResponse] Error executing command {Command} on server {ServerId}", command, serverId);
+            _logger.LogError(ex, "[ExecuteCommandWithResponse] Error executing command {Command} on server {ServerId}", command?.Replace("\r", "").Replace("\n", ""), serverId);
             return null;
         }
     }
