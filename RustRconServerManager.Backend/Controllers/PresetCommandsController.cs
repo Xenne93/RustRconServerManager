@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Models;
 using RustRconServerManager.Shared.PresetCommand;
 using System.Security.Claims;
@@ -94,7 +93,7 @@ namespace RustRconServerManager.Backend.Controllers
                 _dbContext.PresetCommands.Add(command);
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation("[PresetCommandsController] User {UserId} created preset command {PresetId} '{PresetName}'", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, command.Id, LogSanitizer.Sanitize(command.Name));
+                _logger.LogInformation("[PresetCommandsController] User {UserId} created preset command {PresetId} '{PresetName}'", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, command.Id, command.Name?.Replace("\r", "").Replace("\n", ""));
 
                 return CreatedAtAction(nameof(GetPresetCommands), new { serverId = command.RconServerId ?? 0 }, MapToDto(command));
             }

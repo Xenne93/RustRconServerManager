@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Models;
 using RustRconServerManager.Backend.Services;
 using RustRconServerManager.Shared.Scheduler;
@@ -219,7 +218,7 @@ public class PanelSettingsController : ControllerBase
             }
 
             _logger.LogInformation("[PanelSettingsController] User {UserId} purged {Count} records from {Category} (older than {Days} days)",
-                userId, deleted, LogSanitizer.Sanitize(request.Category), request.OlderThanDays);
+                userId, deleted, request.Category?.Replace("\r", "").Replace("\n", ""), request.OlderThanDays);
 
             return Ok(new { deleted, category = request.Category });
         }

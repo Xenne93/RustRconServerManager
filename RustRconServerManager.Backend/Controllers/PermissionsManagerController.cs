@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
+using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Interfaces;
 using RustRconServerManager.Backend.Models;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Shared.PermissionsManager;
 using System.Text.RegularExpressions;
 
@@ -153,7 +153,7 @@ namespace RustRconServerManager.Backend.Controllers
                 // Execute RCON command to get group details
                 string? rconResponse = await _rconBackgroundService.ExecuteCommandWithResponse(command, serverId);
 
-                _logger.LogInformation("RCON Response for '{Command}': {Response}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(rconResponse) ?? "NULL");
+                _logger.LogInformation("RCON Response for '{Command}': {Response}", command.Replace("\r", "").Replace("\n", ""), rconResponse?.Replace("\r", "").Replace("\n", "") ?? "NULL");
 
                 if (string.IsNullOrWhiteSpace(rconResponse))
                 {
@@ -163,7 +163,7 @@ namespace RustRconServerManager.Backend.Controllers
                 // Parse the RCON response to extract players
                 var players = ParsePlayersFromGroupResponse(rconResponse, groupName);
 
-                _logger.LogInformation("Parsed {Count} players for group {GroupName}", players.Count, LogSanitizer.Sanitize(groupName));
+                _logger.LogInformation("Parsed {Count} players for group {GroupName}", players.Count, groupName.Replace("\r", "").Replace("\n", ""));
 
                 return Ok(players);
             }
@@ -277,12 +277,12 @@ namespace RustRconServerManager.Backend.Controllers
                     ? $"c.usergroup add {request.SteamId} {request.GroupName}"
                     : $"o.usergroup add {request.SteamId} {request.GroupName}";
 
-                _logger.LogInformation("Executing command: {Command} for server {ServerId}", LogSanitizer.Sanitize(command), serverId);
+                _logger.LogInformation("Executing command: {Command} for server {ServerId}", command.Replace("\r", "").Replace("\n", ""), serverId);
 
                 // Execute RCON command
                 string? rconResponse = await _rconBackgroundService.ExecuteCommandWithResponse(command, serverId);
 
-                _logger.LogInformation("RCON Response for '{Command}': {Response}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(rconResponse) ?? "NULL");
+                _logger.LogInformation("RCON Response for '{Command}': {Response}", command.Replace("\r", "").Replace("\n", ""), rconResponse?.Replace("\r", "").Replace("\n", "") ?? "NULL");
 
                 return Ok(new {
                     message = $"Player {request.SteamId} added to group {request.GroupName}",
@@ -342,12 +342,12 @@ namespace RustRconServerManager.Backend.Controllers
                     ? $"c.usergroup remove {request.SteamId} {request.GroupName}"
                     : $"o.usergroup remove {request.SteamId} {request.GroupName}";
 
-                _logger.LogInformation("Executing command: {Command} for server {ServerId}", LogSanitizer.Sanitize(command), serverId);
+                _logger.LogInformation("Executing command: {Command} for server {ServerId}", command.Replace("\r", "").Replace("\n", ""), serverId);
 
                 // Execute RCON command
                 string? rconResponse = await _rconBackgroundService.ExecuteCommandWithResponse(command, serverId);
 
-                _logger.LogInformation("RCON Response for '{Command}': {Response}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(rconResponse) ?? "NULL");
+                _logger.LogInformation("RCON Response for '{Command}': {Response}", command.Replace("\r", "").Replace("\n", ""), rconResponse?.Replace("\r", "").Replace("\n", "") ?? "NULL");
 
                 return Ok(new {
                     message = $"Player {request.SteamId} removed from group {request.GroupName}",

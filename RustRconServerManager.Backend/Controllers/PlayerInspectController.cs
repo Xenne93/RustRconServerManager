@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Interfaces;
 using RustRconServerManager.Shared.PlayerInspect;
 
@@ -211,7 +210,7 @@ public class PlayerInspectController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching player data for Steam ID {SteamId}", LogSanitizer.Sanitize(steamId));
+            _logger.LogError(ex, "Error fetching player data for Steam ID {SteamId}", steamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, new { message = "Internal server error" });
         }
     }
@@ -258,7 +257,7 @@ public class PlayerInspectController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching chat messages for Steam ID {SteamId}", LogSanitizer.Sanitize(steamId));
+            _logger.LogError(ex, "Error fetching chat messages for Steam ID {SteamId}", steamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, new { message = "Internal server error" });
         }
     }
@@ -305,7 +304,7 @@ public class PlayerInspectController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching chat messages for Steam ID {SteamId}", LogSanitizer.Sanitize(steamId));
+            _logger.LogError(ex, "Error searching chat messages for Steam ID {SteamId}", steamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, new { message = "Internal server error" });
         }
     }
@@ -355,7 +354,7 @@ public class PlayerInspectController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching kills for Steam ID {SteamId}", LogSanitizer.Sanitize(steamId));
+            _logger.LogError(ex, "Error fetching kills for Steam ID {SteamId}", steamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, new { message = "Internal server error" });
         }
     }
@@ -405,7 +404,7 @@ public class PlayerInspectController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching deaths for Steam ID {SteamId}", LogSanitizer.Sanitize(steamId));
+            _logger.LogError(ex, "Error fetching deaths for Steam ID {SteamId}", steamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, new { message = "Internal server error" });
         }
     }
@@ -497,7 +496,7 @@ public class PlayerInspectController : ControllerBase
             await dbContext.SaveChangesAsync();
 
             _logger.LogInformation("[PlayerInspect] Cleared data for {SteamId} on server {ServerId}: Chat={Chat}, Kills={Kills}, Deaths={Deaths}, Notes={Notes}, Reports={Reports}, BanHistory={BanHistory}, PlayerDeleted={Deleted}",
-                LogSanitizer.Sanitize(steamId), request.ServerId, deletedChat, deletedKills, deletedDeaths, deletedNotes, deletedReports, deletedBanHistory, request.DeletePlayer);
+                steamId?.Replace("\r", "").Replace("\n", ""), request.ServerId, deletedChat, deletedKills, deletedDeaths, deletedNotes, deletedReports, deletedBanHistory, request.DeletePlayer);
 
             return Ok(new
             {
@@ -513,7 +512,7 @@ public class PlayerInspectController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error clearing player data for {SteamId}", LogSanitizer.Sanitize(steamId));
+            _logger.LogError(ex, "Error clearing player data for {SteamId}", steamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, new { message = "Internal server error" });
         }
     }
@@ -563,7 +562,7 @@ public class PlayerInspectController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting player inventory for {SteamId}", LogSanitizer.Sanitize(steamId));
+            _logger.LogError(ex, "Error getting player inventory for {SteamId}", steamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, "An error occurred while fetching the inventory.");
         }
     }

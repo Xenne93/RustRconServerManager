@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Services;
 using RustRconServerManager.Backend.Models;
 using RustRconServerManager.Shared.Scheduler;
@@ -230,7 +229,7 @@ namespace RustRconServerManager.Backend.Controllers
 
                 try
                 {
-                    _logger.LogInformation("[SchedulerController] User {UserId} executing command {CommandId} ({CommandName}) manually: {Command}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, LogSanitizer.Sanitize(command.Name), LogSanitizer.Sanitize(command.Command));
+                    _logger.LogInformation("[SchedulerController] User {UserId} executing command {CommandId} ({CommandName}) manually: {Command}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, command.Name?.Replace("\r", "").Replace("\n", ""), command.Command?.Replace("\r", "").Replace("\n", ""));
                     await client.SendCommandAsync(command.Command);
 
                     _logger.LogInformation("[SchedulerController] Command {CommandId} executed successfully", id);

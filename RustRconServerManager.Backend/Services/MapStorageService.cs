@@ -222,7 +222,7 @@ namespace RustRconServerManager.Backend.Services
             await File.WriteAllBytesAsync(filePath, imageData);
 
             _logger.LogInformation("MapStorageService: Saved server image {Filename} for server {ServerId} to disk ({Size} bytes)",
-                LogSanitizer.Sanitize(filename), serverId, imageData.Length);
+                filename.Replace("\r", "").Replace("\n", ""), serverId, imageData.Length);
         }
 
         /// <summary>
@@ -235,7 +235,7 @@ namespace RustRconServerManager.Backend.Services
             {
                 File.Delete(filePath);
                 _logger.LogInformation("MapStorageService: Deleted server image {Filename} for server {ServerId}",
-                    LogSanitizer.Sanitize(filename), serverId);
+                    filename.Replace("\r", "").Replace("\n", ""), serverId);
             }
         }
     }

@@ -1,7 +1,6 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using RustRconServerManager.Backend.Database;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Interfaces;
 using RustRconServerManager.Shared.ServerWebhooks;
 using System.Text;
@@ -85,7 +84,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player connect webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player connect webhook for {PlayerName}", serverId, playerName?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -147,7 +146,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player disconnect webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player disconnect webhook for {PlayerName}", serverId, playerName?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -284,7 +283,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player ban webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player ban webhook for {PlayerName}", serverId, playerName?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -348,7 +347,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player kick webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player kick webhook for {PlayerName}", serverId, playerName?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -444,7 +443,7 @@ public class DiscordWebhookService : IDiscordWebhookService
 
             // Text message format - use custom text content if provided, otherwise default
             var textMessage = string.IsNullOrWhiteSpace(settings.ServerOfflineTextContent)
-                ? $"🔴 **{serverName}** is offline!"
+                ? $"ðŸ”´ **{serverName}** is offline!"
                 : ReplaceVariables(settings.ServerOfflineTextContent, variables);
 
             // Default embed format
@@ -454,13 +453,13 @@ public class DiscordWebhookService : IDiscordWebhookService
                 {
                     new
                     {
-                        title = "🔴 Server Offline",
+                        title = "ðŸ”´ Server Offline",
                         description = $"**{serverName}** is no longer reachable",
                         color = 15158332, // Red
                         fields = new[]
                         {
                             new { name = "Server", value = serverName, inline = true },
-                            new { name = "Status", value = "❌ Offline", inline = true },
+                            new { name = "Status", value = "âŒ Offline", inline = true },
                             new { name = "Time", value = $"<t:{timestamp}:F>", inline = false }
                         },
                         footer = new { text = "Server Status Monitor" },
@@ -482,7 +481,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server offline webhook for {ServerName}", serverId, LogSanitizer.Sanitize(serverName));
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server offline webhook for {ServerName}", serverId, serverName?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -529,7 +528,7 @@ public class DiscordWebhookService : IDiscordWebhookService
 
             // Text message format - use custom text content if provided, otherwise default
             var textMessage = string.IsNullOrWhiteSpace(settings.ServerOnlineTextContent)
-                ? $"✅ **{serverName}** is back online! (Downtime: {downtimeText})"
+                ? $"âœ… **{serverName}** is back online! (Downtime: {downtimeText})"
                 : ReplaceVariables(settings.ServerOnlineTextContent, variables);
 
             // Default embed format
@@ -539,13 +538,13 @@ public class DiscordWebhookService : IDiscordWebhookService
                 {
                     new
                     {
-                        title = "✅ Server Online",
+                        title = "âœ… Server Online",
                         description = $"**{serverName}** is back online!",
                         color = 3066993, // Green
                         fields = new[]
                         {
                             new { name = "Server", value = serverName, inline = true },
-                            new { name = "Status", value = "✅ Online", inline = true },
+                            new { name = "Status", value = "âœ… Online", inline = true },
                             new { name = "Downtime", value = downtimeText, inline = false },
                             new { name = "Back Online At", value = $"<t:{timestamp}:F>", inline = false }
                         },
@@ -568,7 +567,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server online webhook for {ServerName}", serverId, LogSanitizer.Sanitize(serverName));
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server online webhook for {ServerName}", serverId, serverName?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -630,7 +629,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server protection webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server protection webhook for {PlayerName}", serverId, playerName?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -857,13 +856,13 @@ public class DiscordWebhookService : IDiscordWebhookService
                         {
                             new
                             {
-                                title = "🔴 Server Offline (TEST)",
+                                title = "ðŸ”´ Server Offline (TEST)",
                                 description = $"**{serverName}** is no longer reachable",
                                 color = 15158332,
                                 fields = new[]
                                 {
                                     new { name = "Server", value = serverName, inline = true },
-                                    new { name = "Status", value = "❌ Offline", inline = true },
+                                    new { name = "Status", value = "âŒ Offline", inline = true },
                                     new { name = "Time", value = $"<t:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}:F>", inline = false }
                                 },
                                 footer = new { text = "Server Status Monitor" },
@@ -871,7 +870,7 @@ public class DiscordWebhookService : IDiscordWebhookService
                             }
                         }
                     },
-                    $"🔴 **{serverName}** is offline!"
+                    $"ðŸ”´ **{serverName}** is offline!"
                 ),
 
                 WebhookEventType.ServerOnline => (
@@ -890,13 +889,13 @@ public class DiscordWebhookService : IDiscordWebhookService
                         {
                             new
                             {
-                                title = "✅ Server Online (TEST)",
+                                title = "âœ… Server Online (TEST)",
                                 description = $"**{serverName}** is back online!",
                                 color = 3066993,
                                 fields = new[]
                                 {
                                     new { name = "Server", value = serverName, inline = true },
-                                    new { name = "Status", value = "✅ Online", inline = true },
+                                    new { name = "Status", value = "âœ… Online", inline = true },
                                     new { name = "Downtime", value = "15 minutes", inline = false },
                                     new { name = "Back Online At", value = $"<t:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}:F>", inline = false }
                                 },
@@ -905,7 +904,7 @@ public class DiscordWebhookService : IDiscordWebhookService
                             }
                         }
                     },
-                    $"✅ **{serverName}** is back online! (Downtime: 15 minutes)"
+                    $"âœ… **{serverName}** is back online! (Downtime: 15 minutes)"
                 ),
 
                 WebhookEventType.ServerProtection => (
@@ -1007,12 +1006,12 @@ public class DiscordWebhookService : IDiscordWebhookService
             else
             {
                 var responseBody = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("Failed to send {EventName} webhook. Status: {StatusCode}, Response: {ResponseBody}", eventName, response.StatusCode, LogSanitizer.Sanitize(responseBody));
+                _logger.LogWarning("Failed to send {EventName} webhook. Status: {StatusCode}, Response: {ResponseBody}", eventName, response.StatusCode, responseBody?.Replace("\r", "").Replace("\n", ""));
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sending {EventName} webhook to {WebhookUrl}", eventName, LogSanitizer.Sanitize(webhookUrl));
+            _logger.LogError(ex, "Error sending {EventName} webhook to {WebhookUrl}", eventName, webhookUrl?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -1070,7 +1069,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "JSON parsing error in custom webhook content: {Content}", LogSanitizer.Sanitize(customContent));
+            _logger.LogError(ex, "JSON parsing error in custom webhook content: {Content}", customContent?.Replace("\r", "").Replace("\n", ""));
             return new { content = $"Error: Invalid JSON format - {ex.Message}" };
         }
         catch (Exception ex)

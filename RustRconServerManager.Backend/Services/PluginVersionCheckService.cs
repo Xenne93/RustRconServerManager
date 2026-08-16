@@ -1,8 +1,7 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using RustRconServerManager.Backend.Database;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Models;
 using RustRconServerManager.Shared.PluginVersionCheck;
 
@@ -10,7 +9,7 @@ namespace RustRconServerManager.Backend.Services;
 
 /// <summary>
 /// Service for checking plugin versions against Codefling and Umod.
-/// Uses a local DB cache (PluginVersionCache) — entries expire after 30 minutes.
+/// Uses a local DB cache (PluginVersionCache) â€” entries expire after 30 minutes.
 /// </summary>
 public class PluginVersionCheckService
 {
@@ -46,23 +45,23 @@ public class PluginVersionCheckService
 
             if (pluginSource == null)
             {
-                _logger.LogInformation("[NO SOURCE] Plugin {PluginName} has no source configured for server {ServerId} - skipping version check", LogSanitizer.Sanitize(pluginName), serverId);
+                _logger.LogInformation("[NO SOURCE] Plugin {PluginName} has no source configured for server {ServerId} - skipping version check", pluginName?.Replace("\r", "").Replace("\n", ""), serverId);
                 return null;
             }
 
             if (pluginSource.Source == PluginSource.Custom)
             {
-                _logger.LogInformation("[CUSTOM PLUGIN] Plugin {PluginName} is marked as custom for server {ServerId} - skipping version check", LogSanitizer.Sanitize(pluginName), serverId);
+                _logger.LogInformation("[CUSTOM PLUGIN] Plugin {PluginName} is marked as custom for server {ServerId} - skipping version check", pluginName?.Replace("\r", "").Replace("\n", ""), serverId);
                 return null;
             }
 
-            _logger.LogInformation("[SOURCE CHECK] Plugin {PluginName} configured with source {Source} for server {ServerId}", LogSanitizer.Sanitize(pluginName), pluginSource.Source, serverId);
+            _logger.LogInformation("[SOURCE CHECK] Plugin {PluginName} configured with source {Source} for server {ServerId}", pluginName?.Replace("\r", "").Replace("\n", ""), pluginSource.Source, serverId);
 
             // Step 1: local cache
             var cached = await GetFromCacheAsync(pluginName);
             if (cached != null)
             {
-                _logger.LogInformation("[CACHE HIT] Plugin {PluginName} found in local cache", LogSanitizer.Sanitize(pluginName));
+                _logger.LogInformation("[CACHE HIT] Plugin {PluginName} found in local cache", pluginName?.Replace("\r", "").Replace("\n", ""));
                 return new PluginVersionCheckResult
                 {
                     PluginName = pluginName,
@@ -74,7 +73,7 @@ public class PluginVersionCheckService
                 };
             }
 
-            _logger.LogInformation("[CACHE MISS] Plugin {PluginName} not in local cache, checking {Source} API...", LogSanitizer.Sanitize(pluginName), pluginSource.Source);
+            _logger.LogInformation("[CACHE MISS] Plugin {PluginName} not in local cache, checking {Source} API...", pluginName?.Replace("\r", "").Replace("\n", ""), pluginSource.Source);
 
             // Step 2: configured source
             PluginVersionCheckResult? result = null;
@@ -107,7 +106,7 @@ public class PluginVersionCheckService
                 return result;
             }
 
-            _logger.LogWarning("[NOT FOUND] Plugin {PluginName} not found on {Source}", LogSanitizer.Sanitize(pluginName), pluginSource.Source);
+            _logger.LogWarning("[NOT FOUND] Plugin {PluginName} not found on {Source}", pluginName?.Replace("\r", "").Replace("\n", ""), pluginSource.Source);
             return new PluginVersionCheckResult
             {
                 PluginName = pluginName,
@@ -121,7 +120,7 @@ public class PluginVersionCheckService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking version for plugin {PluginName}", LogSanitizer.Sanitize(pluginName));
+            _logger.LogError(ex, "Error checking version for plugin {PluginName}", pluginName?.Replace("\r", "").Replace("\n", ""));
             return new PluginVersionCheckResult
             {
                 PluginName = pluginName,
@@ -154,7 +153,7 @@ public class PluginVersionCheckService
             .Where(sps => sps.RustServerId == serverId && pluginNames.Contains(sps.PluginName))
             .ToDictionaryAsync(sps => sps.PluginName, sps => sps.Source);
 
-        // Plugins without a source / Custom plugins → null result
+        // Plugins without a source / Custom plugins â†’ null result
         foreach (var plugin in plugins)
         {
             if (!pluginSources.TryGetValue(plugin.PluginName, out var source) || source == PluginSource.Custom)
@@ -235,7 +234,7 @@ public class PluginVersionCheckService
                 existing.ExpiresAt = expiresAt;
                 existing.UmodRateLimitRemaining = umodRateLimitRemaining;
                 existing.UmodRateLimitTotal = umodRateLimitTotal;
-                _logger.LogInformation("[CACHE UPDATE] {PluginName} (expires {ExpiresAt:O})", LogSanitizer.Sanitize(result.PluginName), expiresAt);
+                _logger.LogInformation("[CACHE UPDATE] {PluginName} (expires {ExpiresAt:O})", result.PluginName?.Replace("\r", "").Replace("\n", ""), expiresAt);
             }
             else
             {
@@ -250,14 +249,14 @@ public class PluginVersionCheckService
                     UmodRateLimitRemaining = umodRateLimitRemaining,
                     UmodRateLimitTotal = umodRateLimitTotal
                 });
-                _logger.LogInformation("[CACHE SAVE] {PluginName} (expires {ExpiresAt:O})", LogSanitizer.Sanitize(result.PluginName), expiresAt);
+                _logger.LogInformation("[CACHE SAVE] {PluginName} (expires {ExpiresAt:O})", result.PluginName?.Replace("\r", "").Replace("\n", ""), expiresAt);
             }
 
             await _dbContext.SaveChangesAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving plugin {PluginName} to cache", LogSanitizer.Sanitize(result.PluginName));
+            _logger.LogError(ex, "Error saving plugin {PluginName} to cache", result.PluginName?.Replace("\r", "").Replace("\n", ""));
         }
     }
 
@@ -266,14 +265,14 @@ public class PluginVersionCheckService
         try
         {
             var url = $"https://www.codefling.com/db/?category=all&filename={Uri.EscapeDataString(fileName)}";
-            _logger.LogInformation("[CODEFLING] Checking filename '{FileName}' -> URL: {Url}", LogSanitizer.Sanitize(fileName), LogSanitizer.Sanitize(url));
+            _logger.LogInformation("[CODEFLING] Checking filename '{FileName}' -> URL: {Url}", fileName?.Replace("\r", "").Replace("\n", ""), url?.Replace("\r", "").Replace("\n", ""));
 
             var response = await _httpClient.GetAsync(url);
-            _logger.LogInformation("[CODEFLING] Response for '{FileName}': StatusCode={StatusCode}", LogSanitizer.Sanitize(fileName), response.StatusCode);
+            _logger.LogInformation("[CODEFLING] Response for '{FileName}': StatusCode={StatusCode}", fileName?.Replace("\r", "").Replace("\n", ""), response.StatusCode);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("[CODEFLING] Failed to fetch '{FileName}': {StatusCode}", LogSanitizer.Sanitize(fileName), response.StatusCode);
+                _logger.LogWarning("[CODEFLING] Failed to fetch '{FileName}': {StatusCode}", fileName?.Replace("\r", "").Replace("\n", ""), response.StatusCode);
                 return null;
             }
 
@@ -282,15 +281,15 @@ public class PluginVersionCheckService
 
             var plugin = plugins?.FirstOrDefault();
             if (plugin != null)
-                _logger.LogInformation("[CODEFLING] Found plugin '{Title}' v{Version}", LogSanitizer.Sanitize(plugin.Title), LogSanitizer.Sanitize(plugin.Version));
+                _logger.LogInformation("[CODEFLING] Found plugin '{Title}' v{Version}", plugin.Title?.Replace("\r", "").Replace("\n", ""), plugin.Version?.Replace("\r", "").Replace("\n", ""));
             else
-                _logger.LogInformation("[CODEFLING] No plugin found for '{FileName}'", LogSanitizer.Sanitize(fileName));
+                _logger.LogInformation("[CODEFLING] No plugin found for '{FileName}'", fileName?.Replace("\r", "").Replace("\n", ""));
 
             return plugin;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[CODEFLING] Error checking {FileName}", LogSanitizer.Sanitize(fileName));
+            _logger.LogWarning(ex, "[CODEFLING] Error checking {FileName}", fileName?.Replace("\r", "").Replace("\n", ""));
             return null;
         }
     }
@@ -325,7 +324,7 @@ public class PluginVersionCheckService
             {
                 _logger.LogInformation("[UMOD RATE LIMIT] {RateLimitRemaining}/{RateLimitTotal} requests remaining", rateLimitRemaining, rateLimitTotal);
                 if (rateLimitRemaining.Value < 5)
-                    _logger.LogWarning("⚠️ [UMOD RATE LIMIT] Only {RateLimitRemaining} requests remaining!", rateLimitRemaining);
+                    _logger.LogWarning("âš ï¸ [UMOD RATE LIMIT] Only {RateLimitRemaining} requests remaining!", rateLimitRemaining);
             }
 
             var content = await response.Content.ReadAsStringAsync();
@@ -344,7 +343,7 @@ public class PluginVersionCheckService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error checking Umod for {PluginName}", LogSanitizer.Sanitize(pluginName));
+            _logger.LogWarning(ex, "Error checking Umod for {PluginName}", pluginName?.Replace("\r", "").Replace("\n", ""));
             return null;
         }
     }

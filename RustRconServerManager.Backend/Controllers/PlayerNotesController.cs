@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Models;
 using RustRconServerManager.Shared.PlayerNotes;
 using System.Security.Claims;
@@ -62,7 +61,7 @@ public class PlayerNotesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[PlayerNotesController] Error getting notes for player {SteamId}", LogSanitizer.Sanitize(steamId));
+            _logger.LogError(ex, "[PlayerNotesController] Error getting notes for player {SteamId}", steamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, new { error = "Error retrieving player notes" });
         }
     }
@@ -101,7 +100,7 @@ public class PlayerNotesController : ControllerBase
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation("[PlayerNotesController] User {UserId} created note {NoteId} for player {SteamId} on server {ServerId}",
-                userId, playerNote.Id, LogSanitizer.Sanitize(request.SteamId), request.ServerId);
+                userId, playerNote.Id, request.SteamId?.Replace("\r", "").Replace("\n", ""), request.ServerId);
 
             var dto = new PlayerNoteDTO
             {
@@ -118,7 +117,7 @@ public class PlayerNotesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[PlayerNotesController] Error creating note for player {SteamId}", LogSanitizer.Sanitize(request.SteamId));
+            _logger.LogError(ex, "[PlayerNotesController] Error creating note for player {SteamId}", request.SteamId?.Replace("\r", "").Replace("\n", ""));
             return StatusCode(500, new { error = "Error creating player note" });
         }
     }
@@ -156,7 +155,7 @@ public class PlayerNotesController : ControllerBase
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             _logger.LogInformation("[PlayerNotesController] User {UserId} updated note {NoteId} for player {SteamId}",
-                userId, noteId, LogSanitizer.Sanitize(playerNote.SteamId));
+                userId, noteId, playerNote.SteamId?.Replace("\r", "").Replace("\n", ""));
 
             var dto = new PlayerNoteDTO
             {
@@ -203,7 +202,7 @@ public class PlayerNotesController : ControllerBase
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             _logger.LogInformation("[PlayerNotesController] User {UserId} deleted note {NoteId} for player {SteamId}",
-                userId, noteId, LogSanitizer.Sanitize(playerNote.SteamId));
+                userId, noteId, playerNote.SteamId?.Replace("\r", "").Replace("\n", ""));
 
             return NoContent();
         }

@@ -77,7 +77,7 @@ namespace RustRconServerManager.Backend.Controllers
                 // Execute RCON command to get plugins
                 string? rconResponse = await _rconBackgroundService.ExecuteCommandWithResponse(command, serverId);
 
-                _logger.LogInformation("RCON Response for '{Command}': {Response}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(rconResponse) ?? "NULL");
+                _logger.LogInformation("RCON Response for '{Command}': {Response}", command?.Replace("\r", "").Replace("\n", ""), rconResponse?.Replace("\r", "").Replace("\n", "") ?? "NULL");
 
                 if (string.IsNullOrWhiteSpace(rconResponse))
                 {
@@ -182,12 +182,12 @@ namespace RustRconServerManager.Backend.Controllers
                     ? $"c.load {request.PluginName}"
                     : $"o.load {request.PluginName}";
 
-                _logger.LogInformation("Executing command: {Command} for server {ServerId}", LogSanitizer.Sanitize(command), serverId);
+                _logger.LogInformation("Executing command: {Command} for server {ServerId}", command?.Replace("\r", "").Replace("\n", ""), serverId);
 
                 // Execute RCON command
                 string? rconResponse = await _rconBackgroundService.ExecuteCommandWithResponse(command, serverId);
 
-                _logger.LogInformation("RCON Response for '{Command}': {Response}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(rconResponse) ?? "NULL");
+                _logger.LogInformation("RCON Response for '{Command}': {Response}", command?.Replace("\r", "").Replace("\n", ""), rconResponse?.Replace("\r", "").Replace("\n", "") ?? "NULL");
 
                 return Ok(new
                 {
@@ -249,12 +249,12 @@ namespace RustRconServerManager.Backend.Controllers
                     ? $"c.reload {request.PluginName}"
                     : $"o.reload {request.PluginName}";
 
-                _logger.LogInformation("Executing command: {Command} for server {ServerId}", LogSanitizer.Sanitize(command), serverId);
+                _logger.LogInformation("Executing command: {Command} for server {ServerId}", command?.Replace("\r", "").Replace("\n", ""), serverId);
 
                 // Execute RCON command
                 string? rconResponse = await _rconBackgroundService.ExecuteCommandWithResponse(command, serverId);
 
-                _logger.LogInformation("RCON Response for '{Command}': {Response}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(rconResponse) ?? "NULL");
+                _logger.LogInformation("RCON Response for '{Command}': {Response}", command?.Replace("\r", "").Replace("\n", ""), rconResponse?.Replace("\r", "").Replace("\n", "") ?? "NULL");
 
                 return Ok(new
                 {
@@ -316,12 +316,12 @@ namespace RustRconServerManager.Backend.Controllers
                     ? $"c.unload {request.PluginName}"
                     : $"o.unload {request.PluginName}";
 
-                _logger.LogInformation("Executing command: {Command} for server {ServerId}", LogSanitizer.Sanitize(command), serverId);
+                _logger.LogInformation("Executing command: {Command} for server {ServerId}", command?.Replace("\r", "").Replace("\n", ""), serverId);
 
                 // Execute RCON command
                 string? rconResponse = await _rconBackgroundService.ExecuteCommandWithResponse(command, serverId);
 
-                _logger.LogInformation("RCON Response for '{Command}': {Response}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(rconResponse) ?? "NULL");
+                _logger.LogInformation("RCON Response for '{Command}': {Response}", command?.Replace("\r", "").Replace("\n", ""), rconResponse?.Replace("\r", "").Replace("\n", "") ?? "NULL");
 
                 return Ok(new
                 {
@@ -377,12 +377,12 @@ namespace RustRconServerManager.Backend.Controllers
                     ? "c.reload *"
                     : "o.reload *";
 
-                _logger.LogInformation("Executing command: {Command} for server {ServerId}", LogSanitizer.Sanitize(command), serverId);
+                _logger.LogInformation("Executing command: {Command} for server {ServerId}", command?.Replace("\r", "").Replace("\n", ""), serverId);
 
                 // Execute RCON command
                 string? rconResponse = await _rconBackgroundService.ExecuteCommandWithResponse(command, serverId);
 
-                _logger.LogInformation("RCON Response for '{Command}': {Response}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(rconResponse) ?? "NULL");
+                _logger.LogInformation("RCON Response for '{Command}': {Response}", command?.Replace("\r", "").Replace("\n", ""), rconResponse?.Replace("\r", "").Replace("\n", "") ?? "NULL");
 
                 return Ok(new
                 {
@@ -444,7 +444,7 @@ namespace RustRconServerManager.Backend.Controllers
                         _dbContext.ServerPluginSources.Remove(existingEntry);
                         await _dbContext.SaveChangesAsync();
 
-                        _logger.LogInformation("Removed plugin source for {PluginName} on server {ServerId}", LogSanitizer.Sanitize(request.PluginName), serverId);
+                        _logger.LogInformation("Removed plugin source for {PluginName} on server {ServerId}", request.PluginName?.Replace("\r", "").Replace("\n", ""), serverId);
 
                         return Ok(new
                         {
@@ -468,7 +468,7 @@ namespace RustRconServerManager.Backend.Controllers
                     await _dbContext.SaveChangesAsync();
 
                     _logger.LogInformation("Updated plugin source for {PluginName} on server {ServerId} to {Source}",
-                        LogSanitizer.Sanitize(request.PluginName), serverId, request.Source.Value);
+                        request.PluginName?.Replace("\r", "").Replace("\n", ""), serverId, request.Source.Value);
 
                     return Ok(new
                     {
@@ -491,7 +491,7 @@ namespace RustRconServerManager.Backend.Controllers
                     await _dbContext.SaveChangesAsync();
 
                     _logger.LogInformation("Created plugin source for {PluginName} on server {ServerId} as {Source}",
-                        LogSanitizer.Sanitize(request.PluginName), serverId, request.Source.Value);
+                        request.PluginName?.Replace("\r", "").Replace("\n", ""), serverId, request.Source.Value);
 
                     return Ok(new
                     {
@@ -636,7 +636,7 @@ namespace RustRconServerManager.Backend.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking version for plugin {PluginName}", LogSanitizer.Sanitize(pluginName));
+                _logger.LogError(ex, "Error checking version for plugin {PluginName}", pluginName?.Replace("\r", "").Replace("\n", ""));
                 return StatusCode(500, ApiErrorHelper.FormatError("Error checking plugin version", ex));
             }
         }
