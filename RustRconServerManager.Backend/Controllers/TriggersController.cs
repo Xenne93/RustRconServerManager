@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
 using RustRconServerManager.Backend.Models;
+using System.Security.Claims;
 
 namespace RustRconServerManager.Backend.Controllers
 {
@@ -74,7 +75,7 @@ namespace RustRconServerManager.Backend.Controllers
                 // Verify user has access to this server
                 if (!await User.HasServerAccess(_dbContext, trigger.RconServerId))
                 {
-                    _logger.LogWarning($"User {User.GetEmail()} attempted to access trigger {id} for server {trigger.RconServerId} without authorization");
+                    _logger.LogWarning("User {UserId} attempted to access trigger {TriggerId} for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, trigger.RconServerId);
                     return Forbid();
                 }
 
@@ -82,7 +83,7 @@ namespace RustRconServerManager.Backend.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting trigger {id}");
+                _logger.LogError(ex, "Error getting trigger {TriggerId}", id);
                 return StatusCode(500, new { error = "Failed to retrieve trigger" });
             }
         }
@@ -106,7 +107,7 @@ namespace RustRconServerManager.Backend.Controllers
                 // Verify user has access to this server
                 if (!await User.HasServerAccess(_dbContext, serverId))
                 {
-                    _logger.LogWarning($"User {User.GetEmail()} attempted to create trigger for server {serverId} without authorization");
+                    _logger.LogWarning("User {UserId} attempted to create trigger for server {ServerId} without authorization", user.Id, serverId);
                     return Forbid();
                 }
 
@@ -144,7 +145,7 @@ namespace RustRconServerManager.Backend.Controllers
                 _dbContext.Triggers.Add(trigger);
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation($"User {User.GetEmail()} created trigger {trigger.Id} for server {serverId}");
+                _logger.LogInformation("User {UserId} created trigger {TriggerId} for server {ServerId}", user.Id, trigger.Id, serverId);
 
                 return CreatedAtAction(nameof(GetTrigger), new { id = trigger.Id }, trigger);
             }
@@ -170,7 +171,7 @@ namespace RustRconServerManager.Backend.Controllers
                 // Verify user has access to this server
                 if (!await User.HasServerAccess(_dbContext, existing.RconServerId))
                 {
-                    _logger.LogWarning($"User {User.GetEmail()} attempted to update trigger {id} for server {existing.RconServerId} without authorization");
+                    _logger.LogWarning("User {UserId} attempted to update trigger {TriggerId} for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, existing.RconServerId);
                     return Forbid();
                 }
 
@@ -202,13 +203,13 @@ namespace RustRconServerManager.Backend.Controllers
 
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation($"User {User.GetEmail()} updated trigger {id}");
+                _logger.LogInformation("User {UserId} updated trigger {TriggerId}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id);
 
                 return Ok(existing);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error updating trigger {id}");
+                _logger.LogError(ex, "Error updating trigger {TriggerId}", id);
                 return StatusCode(500, new { error = "Failed to update trigger" });
             }
         }
@@ -228,20 +229,20 @@ namespace RustRconServerManager.Backend.Controllers
                 // Verify user has access to this server
                 if (!await User.HasServerAccess(_dbContext, trigger.RconServerId))
                 {
-                    _logger.LogWarning($"User {User.GetEmail()} attempted to delete trigger {id} for server {trigger.RconServerId} without authorization");
+                    _logger.LogWarning("User {UserId} attempted to delete trigger {TriggerId} for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, trigger.RconServerId);
                     return Forbid();
                 }
 
                 _dbContext.Triggers.Remove(trigger);
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation($"User {User.GetEmail()} deleted trigger {id}");
+                _logger.LogInformation("User {UserId} deleted trigger {TriggerId}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id);
 
                 return NoContent();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error deleting trigger {id}");
+                _logger.LogError(ex, "Error deleting trigger {TriggerId}", id);
                 return StatusCode(500, new { error = "Failed to delete trigger" });
             }
         }

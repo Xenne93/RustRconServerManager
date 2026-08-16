@@ -336,7 +336,7 @@ public class ServerWebhookController : ControllerBase
 
             _logger.LogInformation("TestWebhook: EventType={EventType}, WebhookUrl={WebhookUrl}",
                 request.EventType,
-                string.IsNullOrWhiteSpace(request.WebhookUrl) ? "(empty)" : request.WebhookUrl.Substring(0, Math.Min(50, request.WebhookUrl.Length)));
+                string.IsNullOrWhiteSpace(request.WebhookUrl) ? "(empty)" : LogSanitizer.Sanitize(request.WebhookUrl.Substring(0, Math.Min(50, request.WebhookUrl.Length))));
 
             ApplicationUser user = await User.GetUser(_dbContext);
             _logger.LogInformation("TestWebhook: User retrieved: {UserId}", user.Id);
@@ -380,15 +380,19 @@ public class ServerWebhookController : ControllerBase
             _logger.LogInformation("TestWebhook: Validating URL format");
             if (!Uri.TryCreate(request.WebhookUrl, UriKind.Absolute, out var uri))
             {
-                _logger.LogWarning("TestWebhook: Invalid URL format: {WebhookUrl}", request.WebhookUrl);
+                _logger.LogWarning("TestWebhook: Invalid URL format: {WebhookUrl}", LogSanitizer.Sanitize(request.WebhookUrl));
                 return BadRequest("Invalid webhook URL format");
             }
 
             _logger.LogInformation("TestWebhook: Checking if URL is Discord webhook");
-            if (!request.WebhookUrl.Contains("discord.com/api/webhooks/", StringComparison.OrdinalIgnoreCase) &&
-                !request.WebhookUrl.Contains("discordapp.com/api/webhooks/", StringComparison.OrdinalIgnoreCase))
+            bool isDiscordHost = uri.Host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) ||
+                                  uri.Host.Equals("discordapp.com", StringComparison.OrdinalIgnoreCase) ||
+                                  uri.Host.EndsWith(".discord.com", StringComparison.OrdinalIgnoreCase) ||
+                                  uri.Host.EndsWith(".discordapp.com", StringComparison.OrdinalIgnoreCase);
+
+            if (!isDiscordHost || !uri.AbsolutePath.StartsWith("/api/webhooks/", StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogWarning("TestWebhook: URL is not a Discord webhook: {WebhookUrl}", request.WebhookUrl);
+                _logger.LogWarning("TestWebhook: URL is not a Discord webhook: {WebhookUrl}", LogSanitizer.Sanitize(request.WebhookUrl));
                 return BadRequest("URL must be a valid Discord webhook URL (discord.com or discordapp.com)");
             }
 

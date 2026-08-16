@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using RustRconServerManager.Backend.Database;
+using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Interfaces;
 using RustRconServerManager.Shared.ServerWebhooks;
 using System.Text;
@@ -84,7 +85,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending player connect webhook for {playerName}");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player connect webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
         }
     }
 
@@ -146,7 +147,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending player disconnect webhook for {playerName}");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player disconnect webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
         }
     }
 
@@ -215,7 +216,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending player kill webhook");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player kill webhook", serverId);
         }
     }
 
@@ -283,7 +284,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending player ban webhook for {playerName}");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player ban webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
         }
     }
 
@@ -347,7 +348,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending player kick webhook for {playerName}");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player kick webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
         }
     }
 
@@ -418,7 +419,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending player report webhook");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending player report webhook", serverId);
         }
     }
 
@@ -481,7 +482,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending server offline webhook for {serverName}");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server offline webhook for {ServerName}", serverId, LogSanitizer.Sanitize(serverName));
         }
     }
 
@@ -567,7 +568,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending server online webhook for {serverName}");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server online webhook for {ServerName}", serverId, LogSanitizer.Sanitize(serverName));
         }
     }
 
@@ -629,7 +630,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"[SERVER {serverId}] Error sending server protection webhook for {playerName}");
+            _logger.LogError(ex, "[SERVER {ServerId}] Error sending server protection webhook for {PlayerName}", serverId, LogSanitizer.Sanitize(playerName));
         }
     }
 
@@ -951,7 +952,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error sending test webhook for {eventType}");
+            _logger.LogError(ex, "Error sending test webhook for {EventType}", eventType);
             throw;
         }
     }
@@ -968,7 +969,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error loading webhook settings for server {serverId}");
+            _logger.LogError(ex, "Error loading webhook settings for server {ServerId}", serverId);
             return null;
         }
     }
@@ -985,7 +986,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error loading server name for server {serverId}");
+            _logger.LogError(ex, "Error loading server name for server {ServerId}", serverId);
             return $"Server {serverId}";
         }
     }
@@ -1001,17 +1002,17 @@ public class DiscordWebhookService : IDiscordWebhookService
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation($"Successfully sent {eventName} webhook");
+                _logger.LogInformation("Successfully sent {EventName} webhook", eventName);
             }
             else
             {
                 var responseBody = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning($"Failed to send {eventName} webhook. Status: {response.StatusCode}, Response: {responseBody}");
+                _logger.LogWarning("Failed to send {EventName} webhook. Status: {StatusCode}, Response: {ResponseBody}", eventName, response.StatusCode, LogSanitizer.Sanitize(responseBody));
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error sending {eventName} webhook to {webhookUrl}");
+            _logger.LogError(ex, "Error sending {EventName} webhook to {WebhookUrl}", eventName, LogSanitizer.Sanitize(webhookUrl));
         }
     }
 
@@ -1069,7 +1070,7 @@ public class DiscordWebhookService : IDiscordWebhookService
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "JSON parsing error in custom webhook content: {Content}", customContent);
+            _logger.LogError(ex, "JSON parsing error in custom webhook content: {Content}", LogSanitizer.Sanitize(customContent));
             return new { content = $"Error: Invalid JSON format - {ex.Message}" };
         }
         catch (Exception ex)

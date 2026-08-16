@@ -352,12 +352,12 @@ namespace RustRconServerManager.Backend.Controllers
                        {
                                string banCommand = $"banid {request.SteamId} \"{request.PlayerName}\" \"[GLOBAL BAN] {request.Reason}\" {request.DurationHours}";
                            _rconService.SendRconCommand(banCommand, server.Id);
-                           _logger.LogInformation("Sent global ban command to server {ServerName} (ID: {ServerId}) for player {PlayerName}", server.Name, server.Id, request.PlayerName);
+                           _logger.LogInformation("Sent global ban command to server {ServerName} (ID: {ServerId}) for player {PlayerName}", LogSanitizer.Sanitize(server.Name), server.Id, LogSanitizer.Sanitize(request.PlayerName));
                        }
                        catch (Exception ex)
                        {
                            // Log but don't fail if server is offline - ban is still tracked in database
-                           _logger.LogWarning(ex, "Could not send global ban command to server {ServerName}", server.Name);
+                           _logger.LogWarning(ex, "Could not send global ban command to server {ServerName}", LogSanitizer.Sanitize(server.Name));
                        }
                    }
                }
@@ -870,7 +870,7 @@ namespace RustRconServerManager.Backend.Controllers
                // If toggling OFF a global ban, unban from all servers
                if (ban.IsGlobalBan && !request.IsGlobalBan)
                {
-                   _logger.LogInformation("[GLOBAL UNBAN] Toggling off global ban for {SteamId}. Unbanning from all servers...", ban.SteamId);
+                   _logger.LogInformation("[GLOBAL UNBAN] Toggling off global ban for {SteamId}. Unbanning from all servers...", LogSanitizer.Sanitize(ban.SteamId));
 
                    // Get current user email for audit trail
                    var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System";
@@ -902,7 +902,7 @@ namespace RustRconServerManager.Backend.Controllers
                        {
                            string unbanCommand = $"unban {playerBan.SteamId}";
                            _rconService.SendRconCommand(unbanCommand, playerBan.ServerId);
-                           _logger.LogInformation("[GLOBAL UNBAN] Sent unban command for {SteamId} on server {ServerId}", ban.SteamId, playerBan.ServerId);
+                           _logger.LogInformation("[GLOBAL UNBAN] Sent unban command for {SteamId} on server {ServerId}", LogSanitizer.Sanitize(ban.SteamId), playerBan.ServerId);
                        }
                        catch (Exception ex)
                        {
@@ -914,7 +914,7 @@ namespace RustRconServerManager.Backend.Controllers
                    }
 
                    await dbContext.SaveChangesAsync();
-                   _logger.LogInformation("[GLOBAL UNBAN] Removed all bans for {SteamId} from database", ban.SteamId);
+                   _logger.LogInformation("[GLOBAL UNBAN] Removed all bans for {SteamId} from database", LogSanitizer.Sanitize(ban.SteamId));
 
                    return Ok(new { message = $"Player {ban.SteamId} has been unbanned from all servers" });
                }
@@ -966,7 +966,7 @@ namespace RustRconServerManager.Backend.Controllers
                // If this is a global ban, unban from all servers
                if (ban.IsGlobalBan && ban.ServerId == -1)
                {
-                   _logger.LogInformation("[GLOBAL UNBAN] Removing global ban for {SteamId}", ban.SteamId);
+                   _logger.LogInformation("[GLOBAL UNBAN] Removing global ban for {SteamId}", LogSanitizer.Sanitize(ban.SteamId));
 
                    // Find all server-specific bans created by this global ban
                    var relatedServerBans = await dbContext.PlayerBans
@@ -994,7 +994,7 @@ namespace RustRconServerManager.Backend.Controllers
                        {
                            string unbanCommand = $"unban {serverBan.SteamId}";
                            _rconService.SendRconCommand(unbanCommand, serverBan.ServerId);
-                           _logger.LogInformation("[GLOBAL UNBAN] Sent unban command for {SteamId} on server {ServerId}", ban.SteamId, serverBan.ServerId);
+                           _logger.LogInformation("[GLOBAL UNBAN] Sent unban command for {SteamId} on server {ServerId}", LogSanitizer.Sanitize(ban.SteamId), serverBan.ServerId);
                        }
                        catch (Exception ex)
                        {
@@ -1057,7 +1057,7 @@ namespace RustRconServerManager.Backend.Controllers
                    {
                        string unbanCommand = $"unban {ban.SteamId}";
                        _rconService.SendRconCommand(unbanCommand, ban.ServerId);
-                       _logger.LogInformation("[UNBAN] Sent unban command for SteamID {SteamId} on server {ServerId}", ban.SteamId, ban.ServerId);
+                       _logger.LogInformation("[UNBAN] Sent unban command for SteamID {SteamId} on server {ServerId}", LogSanitizer.Sanitize(ban.SteamId), ban.ServerId);
                    }
                    catch (Exception ex)
                    {
@@ -1068,7 +1068,7 @@ namespace RustRconServerManager.Backend.Controllers
                    // Remove the ban record from database
                    dbContext.PlayerBans.Remove(ban);
                    await dbContext.SaveChangesAsync();
-                   _logger.LogInformation("[UNBAN] Removed ban record for SteamID {SteamId} from database", ban.SteamId);
+                   _logger.LogInformation("[UNBAN] Removed ban record for SteamID {SteamId} from database", LogSanitizer.Sanitize(ban.SteamId));
 
                    return Ok(new { message = "Player unbanned successfully on server and database updated" });
                }
@@ -1342,12 +1342,12 @@ namespace RustRconServerManager.Backend.Controllers
                // Build the RCON command: inventory.giveto <steamid> <shortname> <quantity>
                var command = $"inventory.giveto {request.SteamId} {request.ShortName} {request.Quantity}";
 
-               _logger.LogInformation("[GIVE ITEM] Executing command: {Command} for player {PlayerName}", command, request.PlayerName);
+               _logger.LogInformation("[GIVE ITEM] Executing command: {Command} for player {PlayerName}", LogSanitizer.Sanitize(command), LogSanitizer.Sanitize(request.PlayerName));
 
                // Execute the RCON command
                var response = await _rconService.ExecuteCommandWithResponse(command, request.ServerId);
 
-               _logger.LogDebug("[GIVE ITEM] Command response: {Response}", response);
+               _logger.LogDebug("[GIVE ITEM] Command response: {Response}", LogSanitizer.Sanitize(response));
 
                return Ok(new {
                    success = true,

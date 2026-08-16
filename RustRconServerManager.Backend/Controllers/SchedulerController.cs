@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
+using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Services;
 using RustRconServerManager.Backend.Models;
 using RustRconServerManager.Shared.Scheduler;
@@ -44,7 +45,7 @@ namespace RustRconServerManager.Backend.Controllers
             {
                 if (!await User.HasServerAccess(_dbContext, serverId))
                 {
-                    _logger.LogWarning($"[SchedulerController] User {User.GetEmail()} attempted to access server {serverId} without authorization");
+                    _logger.LogWarning("[SchedulerController] User {UserId} attempted to access server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, serverId);
                     return Forbid();
                 }
 
@@ -55,7 +56,7 @@ namespace RustRconServerManager.Backend.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"[SchedulerController] Error getting scheduled commands for server {serverId}");
+                _logger.LogError(ex, "[SchedulerController] Error getting scheduled commands for server {ServerId}", serverId);
                 return StatusCode(500, new { error = "Failed to retrieve scheduled commands" });
             }
         }
@@ -71,7 +72,7 @@ namespace RustRconServerManager.Backend.Controllers
             {
                 if (!await User.HasServerAccess(_dbContext, dto.RconServerId))
                 {
-                    _logger.LogWarning($"[SchedulerController] User {User.GetEmail()} attempted to create command for server {dto.RconServerId} without authorization");
+                    _logger.LogWarning("[SchedulerController] User {UserId} attempted to create command for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, dto.RconServerId);
                     return Forbid();
                 }
 
@@ -105,7 +106,7 @@ namespace RustRconServerManager.Backend.Controllers
                 var utcOffset = dto.UtcOffsetMinutes ?? 0;
                 var created = await _scheduledCommandService.CreateScheduledCommandAsync(command, utcOffset);
 
-                _logger.LogInformation($"[SchedulerController] User {User.GetEmail()} created scheduled command {created.Id} for server {created.RconServerId} (utcOffset={utcOffset})");
+                _logger.LogInformation("[SchedulerController] User {UserId} created scheduled command {CommandId} for server {ServerId} (utcOffset={UtcOffset})", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, created.Id, created.RconServerId, utcOffset);
 
                 return Ok(MapToDto(created));
             }
@@ -130,7 +131,7 @@ namespace RustRconServerManager.Backend.Controllers
 
                 if (!await User.HasServerAccess(_dbContext, existing.RconServerId))
                 {
-                    _logger.LogWarning($"[SchedulerController] User {User.GetEmail()} attempted to update command {id} for server {existing.RconServerId} without authorization");
+                    _logger.LogWarning("[SchedulerController] User {UserId} attempted to update command {CommandId} for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, existing.RconServerId);
                     return Forbid();
                 }
 
@@ -160,13 +161,13 @@ namespace RustRconServerManager.Backend.Controllers
                 var utcOffset = dto.UtcOffsetMinutes ?? 0;
                 var updated = await _scheduledCommandService.UpdateScheduledCommandAsync(existing, utcOffset);
 
-                _logger.LogInformation($"[SchedulerController] User {User.GetEmail()} updated scheduled command {id} (utcOffset={utcOffset})");
+                _logger.LogInformation("[SchedulerController] User {UserId} updated scheduled command {CommandId} (utcOffset={UtcOffset})", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, utcOffset);
 
                 return Ok(MapToDto(updated));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"[SchedulerController] Error updating scheduled command {id}");
+                _logger.LogError(ex, "[SchedulerController] Error updating scheduled command {CommandId}", id);
                 return StatusCode(500, new { error = "Failed to update scheduled command" });
             }
         }
@@ -185,19 +186,19 @@ namespace RustRconServerManager.Backend.Controllers
 
                 if (!await User.HasServerAccess(_dbContext, command.RconServerId))
                 {
-                    _logger.LogWarning($"[SchedulerController] User {User.GetEmail()} attempted to delete command {id} for server {command.RconServerId} without authorization");
+                    _logger.LogWarning("[SchedulerController] User {UserId} attempted to delete command {CommandId} for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, command.RconServerId);
                     return Forbid();
                 }
 
                 await _scheduledCommandService.DeleteScheduledCommandAsync(id);
 
-                _logger.LogInformation($"[SchedulerController] User {User.GetEmail()} deleted scheduled command {id}");
+                _logger.LogInformation("[SchedulerController] User {UserId} deleted scheduled command {CommandId}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id);
 
                 return NoContent();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"[SchedulerController] Error deleting scheduled command {id}");
+                _logger.LogError(ex, "[SchedulerController] Error deleting scheduled command {CommandId}", id);
                 return StatusCode(500, new { error = "Failed to delete scheduled command" });
             }
         }
@@ -216,35 +217,35 @@ namespace RustRconServerManager.Backend.Controllers
 
                 if (!await User.HasServerAccess(_dbContext, command.RconServerId))
                 {
-                    _logger.LogWarning($"[SchedulerController] User {User.GetEmail()} attempted to execute command {id} for server {command.RconServerId} without authorization");
+                    _logger.LogWarning("[SchedulerController] User {UserId} attempted to execute command {CommandId} for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, command.RconServerId);
                     return Forbid();
                 }
 
                 if (!_rconConnectionManager.TryGetClient(command.RconServerId, out var client) || !client.IsConnected)
                 {
-                    _logger.LogWarning($"[SchedulerController] Server {command.RconServerId} is not connected");
+                    _logger.LogWarning("[SchedulerController] Server {ServerId} is not connected", command.RconServerId);
                     await _scheduledCommandService.MarkAsExecutedAsync(id, false, "Server not connected");
                     return BadRequest(new { error = "Server is not connected" });
                 }
 
                 try
                 {
-                    _logger.LogInformation($"[SchedulerController] User {User.GetEmail()} executing command {id} ({command.Name}) manually: {command.Command}");
+                    _logger.LogInformation("[SchedulerController] User {UserId} executing command {CommandId} ({CommandName}) manually: {Command}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, LogSanitizer.Sanitize(command.Name), LogSanitizer.Sanitize(command.Command));
                     await client.SendCommandAsync(command.Command);
 
-                    _logger.LogInformation($"[SchedulerController] Command {id} executed successfully");
+                    _logger.LogInformation("[SchedulerController] Command {CommandId} executed successfully", id);
 
                     return Ok(new { message = "Command executed successfully" });
                 }
                 catch (Exception sendEx)
                 {
-                    _logger.LogError(sendEx, $"[SchedulerController] Failed to send command {id} to RCON");
+                    _logger.LogError(sendEx, "[SchedulerController] Failed to send command {CommandId} to RCON", id);
                     return BadRequest(new { error = $"Failed to execute command: {sendEx.Message}" });
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"[SchedulerController] Error executing command {id}");
+                _logger.LogError(ex, "[SchedulerController] Error executing command {CommandId}", id);
                 return StatusCode(500, new { error = "Failed to execute command" });
             }
         }
@@ -263,20 +264,20 @@ namespace RustRconServerManager.Backend.Controllers
 
                 if (!await User.HasServerAccess(_dbContext, command.RconServerId))
                 {
-                    _logger.LogWarning($"[SchedulerController] User {User.GetEmail()} attempted to toggle command {id} for server {command.RconServerId} without authorization");
+                    _logger.LogWarning("[SchedulerController] User {UserId} attempted to toggle command {CommandId} for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, command.RconServerId);
                     return Forbid();
                 }
 
                 command.IsActive = !command.IsActive;
                 var updated = await _scheduledCommandService.UpdateScheduledCommandAsync(command);
 
-                _logger.LogInformation($"[SchedulerController] User {User.GetEmail()} toggled active status of command {id} to {updated.IsActive}");
+                _logger.LogInformation("[SchedulerController] User {UserId} toggled active status of command {CommandId} to {IsActive}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id, updated.IsActive);
 
                 return Ok(MapToDto(updated));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"[SchedulerController] Error toggling active status of command {id}");
+                _logger.LogError(ex, "[SchedulerController] Error toggling active status of command {CommandId}", id);
                 return StatusCode(500, new { error = "Failed to toggle active status" });
             }
         }

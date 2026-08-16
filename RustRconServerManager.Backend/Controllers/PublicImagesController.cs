@@ -45,7 +45,16 @@ namespace RustRconServerManager.Backend.Controllers
             }
 
             // Try to serve from disk first (fast)
-            var filePath = _mapStorageService.GetServerImageFilePath(instanceHash, serverId, filename);
+            string filePath;
+            try
+            {
+                filePath = _mapStorageService.GetServerImageFilePath(instanceHash, serverId, filename);
+            }
+            catch (ArgumentException)
+            {
+                return NotFound("Invalid image path.");
+            }
+
             if (System.IO.File.Exists(filePath))
             {
                 var imageBytes = await System.IO.File.ReadAllBytesAsync(filePath);

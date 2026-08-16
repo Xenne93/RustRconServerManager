@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using RustRconServerManager.Backend.Helpers;
 
 namespace RustRconServerManager.Backend.Services;
 
@@ -19,7 +20,7 @@ public class EmailService : IEmailService
         var host = _configuration["Smtp:Host"];
         if (string.IsNullOrWhiteSpace(host))
         {
-            _logger.LogWarning("SMTP is not configured (Smtp:Host is empty) - password recovery email was not sent to {Email}", toEmail);
+            _logger.LogWarning("SMTP is not configured (Smtp:Host is empty) - password recovery email was not sent to {MaskedEmail}", LogSanitizer.Sanitize(MaskEmail(toEmail)));
             return false;
         }
 
@@ -53,8 +54,22 @@ public class EmailService : IEmailService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to send password recovery email to {Email}", toEmail);
+            _logger.LogWarning(ex, "Failed to send password recovery email to {MaskedEmail}", LogSanitizer.Sanitize(MaskEmail(toEmail)));
             return false;
         }
+    }
+
+    // Logs a partially redacted form of the address (e.g. "j***@example.com") so failures
+    // remain diagnosable without writing the full recipient email (PII) to the log sink.
+    private static string MaskEmail(string email)
+    {
+        if (string.IsNullOrEmpty(email))
+            return "(empty)";
+
+        var atIndex = email.IndexOf('@');
+        if (atIndex <= 0)
+            return "***";
+
+        return $"{email[0]}***{email.Substring(atIndex)}";
     }
 }

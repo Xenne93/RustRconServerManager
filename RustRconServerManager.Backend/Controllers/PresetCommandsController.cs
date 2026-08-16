@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
+using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Models;
 using RustRconServerManager.Shared.PresetCommand;
+using System.Security.Claims;
 
 namespace RustRconServerManager.Backend.Controllers
 {
@@ -34,7 +36,7 @@ namespace RustRconServerManager.Backend.Controllers
             {
                 if (!await User.HasServerAccess(_dbContext, serverId))
                 {
-                    _logger.LogWarning($"[PresetCommandsController] User {User.GetEmail()} attempted to access server {serverId} without authorization");
+                    _logger.LogWarning("[PresetCommandsController] User {UserId} attempted to access server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, serverId);
                     return Forbid();
                 }
 
@@ -49,7 +51,7 @@ namespace RustRconServerManager.Backend.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"[PresetCommandsController] Error getting preset commands for server {serverId}");
+                _logger.LogError(ex, "[PresetCommandsController] Error getting preset commands for server {ServerId}", serverId);
                 return StatusCode(500, new { error = "Failed to retrieve preset commands" });
             }
         }
@@ -73,7 +75,7 @@ namespace RustRconServerManager.Backend.Controllers
                 {
                     if (!await User.HasServerAccess(_dbContext, dto.RconServerId.Value))
                     {
-                        _logger.LogWarning($"[PresetCommandsController] User {User.GetEmail()} attempted to create preset for server {dto.RconServerId} without authorization");
+                        _logger.LogWarning("[PresetCommandsController] User {UserId} attempted to create preset for server {ServerId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, dto.RconServerId);
                         return Forbid();
                     }
                 }
@@ -92,7 +94,7 @@ namespace RustRconServerManager.Backend.Controllers
                 _dbContext.PresetCommands.Add(command);
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation($"[PresetCommandsController] User {User.GetEmail()} created preset command {command.Id} '{command.Name}'");
+                _logger.LogInformation("[PresetCommandsController] User {UserId} created preset command {PresetId} '{PresetName}'", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, command.Id, LogSanitizer.Sanitize(command.Name));
 
                 return CreatedAtAction(nameof(GetPresetCommands), new { serverId = command.RconServerId ?? 0 }, MapToDto(command));
             }
@@ -118,7 +120,7 @@ namespace RustRconServerManager.Backend.Controllers
                 // Verify access to the server the preset belongs to
                 if (existing.RconServerId.HasValue && !await User.HasServerAccess(_dbContext, existing.RconServerId.Value))
                 {
-                    _logger.LogWarning($"[PresetCommandsController] User {User.GetEmail()} attempted to update preset {id} without authorization");
+                    _logger.LogWarning("[PresetCommandsController] User {UserId} attempted to update preset {PresetId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id);
                     return Forbid();
                 }
 
@@ -138,13 +140,13 @@ namespace RustRconServerManager.Backend.Controllers
 
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation($"[PresetCommandsController] User {User.GetEmail()} updated preset command {id}");
+                _logger.LogInformation("[PresetCommandsController] User {UserId} updated preset command {PresetId}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id);
 
                 return Ok(MapToDto(existing));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"[PresetCommandsController] Error updating preset command {id}");
+                _logger.LogError(ex, "[PresetCommandsController] Error updating preset command {PresetId}", id);
                 return StatusCode(500, new { error = "Failed to update preset command" });
             }
         }
@@ -164,20 +166,20 @@ namespace RustRconServerManager.Backend.Controllers
                 // Verify access to the server the preset belongs to
                 if (command.RconServerId.HasValue && !await User.HasServerAccess(_dbContext, command.RconServerId.Value))
                 {
-                    _logger.LogWarning($"[PresetCommandsController] User {User.GetEmail()} attempted to delete preset {id} without authorization");
+                    _logger.LogWarning("[PresetCommandsController] User {UserId} attempted to delete preset {PresetId} without authorization", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id);
                     return Forbid();
                 }
 
                 _dbContext.PresetCommands.Remove(command);
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation($"[PresetCommandsController] User {User.GetEmail()} deleted preset command {id}");
+                _logger.LogInformation("[PresetCommandsController] User {UserId} deleted preset command {PresetId}", User.FindFirst(ClaimTypes.NameIdentifier)?.Value, id);
 
                 return NoContent();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"[PresetCommandsController] Error deleting preset command {id}");
+                _logger.LogError(ex, "[PresetCommandsController] Error deleting preset command {PresetId}", id);
                 return StatusCode(500, new { error = "Failed to delete preset command" });
             }
         }

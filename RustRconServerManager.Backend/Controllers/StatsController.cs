@@ -104,7 +104,8 @@ namespace RustRconServerManager.Backend.Controllers
                 // Combine aggregated and recent stats
                 stats.AddRange(recentStats);
 
-                _logger.LogInformation($"Retrieved {stats.Count} stats records for server {serverId}, stat type '{statType}', time range '{timeRange}'");
+                _logger.LogInformation("Retrieved {StatsCount} stats records for server {ServerId}, stat type '{StatType}', time range '{TimeRange}'",
+                    stats.Count, serverId, LogSanitizer.Sanitize(statType), LogSanitizer.Sanitize(timeRange));
 
                 // For player count, round to whole numbers; for other stats, use decimals
                 bool isPlayerCount = statType.ToLower() == "players";
@@ -238,7 +239,7 @@ namespace RustRconServerManager.Backend.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting stats for {StatType} over {TimeRange}", statType, timeRange);
+                _logger.LogError(ex, "Error getting stats for {StatType} over {TimeRange}", LogSanitizer.Sanitize(statType), LogSanitizer.Sanitize(timeRange));
                 return StatusCode(500, ApiErrorHelper.FormatError("Error getting stats", ex));
             }
         }

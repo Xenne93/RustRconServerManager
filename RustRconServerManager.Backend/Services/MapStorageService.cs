@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
+using RustRconServerManager.Backend.Helpers;
 
 namespace RustRconServerManager.Backend.Services
 {
@@ -188,11 +189,26 @@ namespace RustRconServerManager.Backend.Services
         /// <summary>
         /// Gets the file path for a server's custom image.
         /// Path format: Storage/public/{instanceHash}/{serverId}/{filename}
+        /// Resolves the path and verifies it is still contained within the public images
+        /// base directory, since instanceHash is attacker-controlled on the anonymous
+        /// image-serving endpoint and naive character blacklisting isn't safe here
+        /// (legitimate hashes are Base64 and may contain '/' and '+').
         /// </summary>
         public string GetServerImageFilePath(string instanceHash, int serverId, string filename)
         {
-            var directory = Path.Combine(_environment.ContentRootPath, "Storage", "public", instanceHash, serverId.ToString());
-            return Path.Combine(directory, filename);
+            var baseDirectory = Path.Combine(_environment.ContentRootPath, "Storage", "public");
+            var directory = Path.Combine(baseDirectory, instanceHash, serverId.ToString());
+            var filePath = Path.Combine(directory, filename);
+
+            var fullBase = Path.GetFullPath(baseDirectory) + Path.DirectorySeparatorChar;
+            var fullPath = Path.GetFullPath(filePath);
+
+            if (!fullPath.StartsWith(fullBase, StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Invalid instanceHash, serverId, or filename: resolved path escapes the public images directory.");
+            }
+
+            return fullPath;
         }
 
         /// <summary>
@@ -200,14 +216,13 @@ namespace RustRconServerManager.Backend.Services
         /// </summary>
         public async Task SaveServerImageToDisk(string instanceHash, int serverId, string filename, byte[] imageData)
         {
-            var directory = Path.Combine(_environment.ContentRootPath, "Storage", "public", instanceHash, serverId.ToString());
-            Directory.CreateDirectory(directory);
+            var filePath = GetServerImageFilePath(instanceHash, serverId, filename);
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
-            var filePath = Path.Combine(directory, filename);
             await File.WriteAllBytesAsync(filePath, imageData);
 
             _logger.LogInformation("MapStorageService: Saved server image {Filename} for server {ServerId} to disk ({Size} bytes)",
-                filename, serverId, imageData.Length);
+                LogSanitizer.Sanitize(filename), serverId, imageData.Length);
         }
 
         /// <summary>
@@ -220,7 +235,7 @@ namespace RustRconServerManager.Backend.Services
             {
                 File.Delete(filePath);
                 _logger.LogInformation("MapStorageService: Deleted server image {Filename} for server {ServerId}",
-                    filename, serverId);
+                    LogSanitizer.Sanitize(filename), serverId);
             }
         }
     }
