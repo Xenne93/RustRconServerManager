@@ -69,7 +69,7 @@ public class PanelSettingsController : ControllerBase
                 _dbContext.PanelSettings.Add(panelSettings);
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation($"[PanelSettingsController] Created default panel settings for SystemProfile {applicationUser.SystemProfileId}");
+                _logger.LogInformation("[PanelSettingsController] Created default panel settings for SystemProfile {SystemProfileId}", applicationUser.SystemProfileId);
             }
 
             return Ok(MapToDto(panelSettings));
@@ -164,6 +164,9 @@ public class PanelSettingsController : ControllerBase
             var applicationUser = await _dbContext.Users.FindAsync(userId);
             if (applicationUser == null) return NotFound("User not found");
 
+            if (!applicationUser.isAdmin)
+                return Forbid();
+
             var serverIds = await _dbContext.RconServers
                 .Where(s => s.SystemProfileId == applicationUser.SystemProfileId)
                 .Select(s => s.Id)
@@ -215,7 +218,7 @@ public class PanelSettingsController : ControllerBase
             }
 
             _logger.LogInformation("[PanelSettingsController] User {UserId} purged {Count} records from {Category} (older than {Days} days)",
-                userId, deleted, request.Category, request.OlderThanDays);
+                userId, deleted, request.Category?.Replace("\r", "").Replace("\n", ""), request.OlderThanDays);
 
             return Ok(new { deleted, category = request.Category });
         }
@@ -256,8 +259,8 @@ public class PanelSettingsController : ControllerBase
 
             LogLevelState.Minimum = parsedLevel;
 
-            _logger.LogInformation("[PanelSettingsController] Minimum log level changed to {Level} by {User}",
-                parsedLevel, currentUser.Email);
+            _logger.LogInformation("[PanelSettingsController] Minimum log level changed to {Level} by {UserId}",
+                parsedLevel, currentUser.Id);
 
             return Ok(MapToDto(panelSettings));
         }
@@ -295,8 +298,8 @@ public class PanelSettingsController : ControllerBase
 
             _autoUpdateFlagFileService.Write(dto.AutoUpdateEnabled);
 
-            _logger.LogInformation("[PanelSettingsController] Auto-update {State} by {User}",
-                dto.AutoUpdateEnabled ? "enabled" : "disabled", currentUser.Email);
+            _logger.LogInformation("[PanelSettingsController] Auto-update {State} by {UserId}",
+                dto.AutoUpdateEnabled ? "enabled" : "disabled", currentUser.Id);
 
             return Ok(MapToDto(panelSettings));
         }
@@ -330,8 +333,8 @@ public class PanelSettingsController : ControllerBase
             panelSettings.UpdatedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("[PanelSettingsController] Developer mode {State} by {User}",
-                dto.DeveloperModeEnabled ? "enabled" : "disabled", currentUser.Email);
+            _logger.LogInformation("[PanelSettingsController] Developer mode {State} by {UserId}",
+                dto.DeveloperModeEnabled ? "enabled" : "disabled", currentUser.Id);
 
             return Ok(MapToDto(panelSettings));
         }
@@ -365,8 +368,8 @@ public class PanelSettingsController : ControllerBase
             panelSettings.UpdatedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("[PanelSettingsController] Anonymous analytics {State} by {User}",
-                dto.AnalyticsEnabled ? "enabled" : "disabled", currentUser.Email);
+            _logger.LogInformation("[PanelSettingsController] Anonymous analytics {State} by {UserId}",
+                dto.AnalyticsEnabled ? "enabled" : "disabled", currentUser.Id);
 
             return Ok(MapToDto(panelSettings));
         }
@@ -424,8 +427,8 @@ public class PanelSettingsController : ControllerBase
             panelSettings.UpdatedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("[PanelSettingsController] Steam API key {Action} by {User}",
-                dto.RemoveKey ? "removed" : "updated", currentUser.Email);
+            _logger.LogInformation("[PanelSettingsController] Steam API key {Action} by {UserId}",
+                dto.RemoveKey ? "removed" : "updated", currentUser.Id);
 
             return Ok(MapToDto(panelSettings));
         }
@@ -508,8 +511,8 @@ public class PanelSettingsController : ControllerBase
 
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("[PanelSettingsController] VAC-ban override upserted for SteamID {SteamId} by {User}",
-                steamId, currentUser.Email);
+            _logger.LogInformation("[PanelSettingsController] VAC-ban override upserted for SteamID {SteamId} by {UserId}",
+                steamId.Replace("\r", "").Replace("\n", ""), currentUser.Id);
 
             return Ok(new DeveloperVacBanOverrideDto
             {
@@ -547,8 +550,8 @@ public class PanelSettingsController : ControllerBase
             if (deleted == 0)
                 return NotFound("Override not found");
 
-            _logger.LogInformation("[PanelSettingsController] VAC-ban override removed for SteamID {SteamId} by {User}",
-                steamId, currentUser.Email);
+            _logger.LogInformation("[PanelSettingsController] VAC-ban override removed for SteamID {SteamId} by {UserId}",
+                steamId.Replace("\r", "").Replace("\n", ""), currentUser.Id);
 
             return Ok();
         }

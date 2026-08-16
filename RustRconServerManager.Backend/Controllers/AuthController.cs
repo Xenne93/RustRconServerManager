@@ -472,7 +472,7 @@ public class
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword(Authorization_ForgotPasswordDTO model)
     {
-        _logger.LogDebug("[FORGOT-PASSWORD] Request received for email: {Email}", model.Email);
+        _logger.LogDebug("[FORGOT-PASSWORD] Request received");
 
         // Always return 200 to prevent email enumeration
         var genericMessage = "If an account with that email exists, a recovery code has been sent.";
@@ -490,7 +490,7 @@ public class
             return Ok(new { message = genericMessage });
         }
 
-        _logger.LogDebug("[FORGOT-PASSWORD] User found: {Email}", user.Email);
+        _logger.LogDebug("[FORGOT-PASSWORD] User found: {UserId}", user.Id);
 
         // Generate random 6-digit code (overwrites any existing code)
         var code = RandomNumberGenerator.GetInt32(100000, 999999).ToString();

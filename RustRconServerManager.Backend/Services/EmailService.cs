@@ -19,7 +19,7 @@ public class EmailService : IEmailService
         var host = _configuration["Smtp:Host"];
         if (string.IsNullOrWhiteSpace(host))
         {
-            _logger.LogWarning("SMTP is not configured (Smtp:Host is empty) - password recovery email was not sent to {Email}", toEmail);
+            _logger.LogWarning("SMTP is not configured (Smtp:Host is empty) - password recovery email was not sent");
             return false;
         }
 
@@ -53,7 +53,7 @@ public class EmailService : IEmailService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to send password recovery email to {Email}", toEmail);
+            _logger.LogWarning(ex, "Failed to send password recovery email");
             return false;
         }
     }

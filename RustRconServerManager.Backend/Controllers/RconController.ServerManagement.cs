@@ -46,22 +46,17 @@ namespace RustRconServerManager.Backend.Controllers
             {
                 RconServer server = await dbContext.RconServers.SingleOrDefaultAsync(s =>
                     s.Id == serverId && s.SystemProfileId == user.SystemProfileId);
-                
-                if (server.SystemProfileId != user.SystemProfileId)
+
+                if (server == null)
                 {
-                    return Unauthorized("Server does not match users systemprofile.");
+                    return NotFound("Server not found or does not belong to your systemprofile.");
                 }
-                else
-                {
-                    dbContext.RconServers.Remove(server);
-                    await dbContext.SaveChangesAsync();
-                    await _rconBackgroundService.DisconnectServerAsync(server.Id);
-                    await _rconBackgroundService.HandleDeleteServer(server);
-                    return Ok("Server successfully deleted");
-                }
-               
-                    
-                
+
+                dbContext.RconServers.Remove(server);
+                await dbContext.SaveChangesAsync();
+                await _rconBackgroundService.DisconnectServerAsync(server.Id);
+                await _rconBackgroundService.HandleDeleteServer(server);
+                return Ok("Server successfully deleted");
 
 
             }

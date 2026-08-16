@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.SignalRHubs;
@@ -32,13 +32,13 @@ public partial class RconBackgroundService
 
             client.OnMessageReceived += async (sender, args) =>
             {
-                _logger.LogInformation("[Server {0}] Message: {1}", args.ServerId, args.Message);
+                _logger.LogInformation("[Server {ServerId}] Message: {Message}", args.ServerId, args.Message?.Replace("\r", "").Replace("\n", ""));
                 await ServerMessageReceived(args.ServerId, args.Message);
             };
 
             client.OnCommandAnswerReceived += async (sender, args) =>
             {
-                _logger.LogDebug("[Server {0}] Answer: {1}", args.ServerId, args.Message);
+                _logger.LogDebug("[Server {ServerId}] Answer: {Message}", args.ServerId, args.Message?.Replace("\r", "").Replace("\n", ""));
                 await ServerCommandAnswerReceived(args.ServerId, args.Message, args.Command, args.Purpose);
             };
 
@@ -50,19 +50,19 @@ public partial class RconBackgroundService
 
             client.OnChatMessageReceived += async (sender, args) =>
             {
-                _logger.LogWarning("Global chat received: " + args.ChatMessage);
+                _logger.LogWarning("Global chat received: {ChatMessage}", args.ChatMessage?.Replace("\r", "").Replace("\n", ""));
                 await OnChatReceived(args.ServerId, args.ChatMessage, args.PlayerId, args.PlayerName, args.Channel.ToString());
             };
 
             client.OnPlayerKill += async (sender, args) =>
             {
-                _logger.LogWarning("Player killed: " + args.KillerName + " killed " + args.VictimName);
+                _logger.LogWarning("Player killed: {KillerName} killed {VictimName}", args.KillerName?.Replace("\r", "").Replace("\n", ""), args.VictimName?.Replace("\r", "").Replace("\n", ""));
                 await PlayerKilled(args.ServerId, args.KillerName, args.KillerId, args.VictimName, args.VictimId, args.Position);
             };
 
             client.OnPlayerConnected += async (sender, args) =>
             {
-                _logger.LogWarning("Player connected: " + args.PlayerName);
+                _logger.LogWarning("Player connected: {PlayerName}", args.PlayerName?.Replace("\r", "").Replace("\n", ""));
                 // Note: args.PlayerId contains the player NAME, args.PlayerName contains the SteamId
                 await OnPlayerConnectedAsync(args.ServerId, args.PlayerName, args.PlayerId, args.PlayerEndpoint);
             };
@@ -70,14 +70,14 @@ public partial class RconBackgroundService
             client.OnPlayerDisconnected += async (sender, args) =>
             {
                 _logger.LogInformation("Player disconnected: {PlayerName} ({PlayerId}) - Reason: {Reason}",
-                    args.PlayerName, args.PlayerId, args.Reason);
+                    args.PlayerName?.Replace("\r", "").Replace("\n", ""), args.PlayerId, args.Reason?.Replace("\r", "").Replace("\n", ""));
                 await OnPlayerDisconnectedAsync(args.ServerId, args.PlayerId, args.PlayerName, args.Reason);
             };
 
             client.OnPlayerReported += async (sender, args) =>
             {
                 _logger.LogInformation("Player reported: {Reporter} reported {Reported} for {Type}",
-                    args.ReporterName, args.ReportedName, args.Type);
+                    args.ReporterName?.Replace("\r", "").Replace("\n", ""), args.ReportedName?.Replace("\r", "").Replace("\n", ""), args.Type?.Replace("\r", "").Replace("\n", ""));
                 await OnPlayerReportedAsync(args.ServerId, args.ReporterName, args.ReporterId,
                     args.ReportedName, args.ReportedId, args.Subject, args.Message, args.Type);
             };
@@ -123,7 +123,7 @@ public partial class RconBackgroundService
         using var scope = _scopeFactory.CreateScope();
         AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        _logger.LogInformation("[RconBackgroundService] Message from Server {ServerId}: {Message}", serverId, message);
+        _logger.LogInformation("[RconBackgroundService] Message from Server {ServerId}: {Message}", serverId, message?.Replace("\r", "").Replace("\n", ""));
 
         RconLogEntry logEntry = new RconLogEntry();
         logEntry.CreatedAt = DateTime.UtcNow;

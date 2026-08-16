@@ -46,7 +46,7 @@ public class AuditLogService : IAuditLogService
         catch (Exception ex)
         {
             // Audit logging must never break the actual action it's recording.
-            _logger.LogError(ex, "[AuditLogService] Failed to write audit log entry for action {Action}", action);
+            _logger.LogError(ex, "[AuditLogService] Failed to write audit log entry for action {Action}", action.Replace("\r", "").Replace("\n", ""));
         }
     }
 }
