@@ -1,5 +1,4 @@
 using RustRconServerManager.Backend.Database;
-using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Backend.Models;
 
 namespace RustRconServerManager.Backend.Services;
@@ -47,7 +46,7 @@ public class AuditLogService : IAuditLogService
         catch (Exception ex)
         {
             // Audit logging must never break the actual action it's recording.
-            _logger.LogError(ex, "[AuditLogService] Failed to write audit log entry for action {Action}", LogSanitizer.Sanitize(action));
+            _logger.LogError(ex, "[AuditLogService] Failed to write audit log entry for action {Action}", action.Replace("\r", "").Replace("\n", ""));
         }
     }
 }
