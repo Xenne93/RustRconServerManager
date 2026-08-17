@@ -382,6 +382,20 @@ public partial class RconBackgroundService : BackgroundService, IRconBackgroundS
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(r => r.LatestPlayerCount, _ => playerList.Count));
 
+            // Clear the suppress flag as soon as the first playerlist poll after a (re)connect
+            // completes - do this regardless of whether the list is empty, since an empty list
+            // (nobody online yet right after a reconnect) is still a completed sync. This used to
+            // be gated behind the non-empty check below, which meant that whenever nobody happened
+            // to be online yet at the very first poll (the common case right after a server
+            // restart), the flag stayed stuck "true" until a later poll found someone already
+            // online - silently and permanently dropping the Discord notification for whoever
+            // was actually the first player to join live in the meantime.
+            if (_suppressPlayerEvents.TryGetValue(serverId, out var suppressed) && suppressed)
+            {
+                _suppressPlayerEvents[serverId] = false;
+                _logger.LogInformation("[SERVER {ServerId}] Initial player sync complete - notifications enabled", serverId);
+            }
+
             // If the list is empty (error or no players online, return
             if (playerList == null || playerList.Count == 0)
                 return;
@@ -479,14 +493,6 @@ public partial class RconBackgroundService : BackgroundService, IRconBackgroundS
             }
 
             await db.SaveChangesAsync();
-
-            // Clear the suppress flag after the first playerlist sync completes
-            // From this point on, player join/leave events will trigger notifications normally
-            if (_suppressPlayerEvents.TryGetValue(serverId, out var suppressed) && suppressed)
-            {
-                _suppressPlayerEvents[serverId] = false;
-                _logger.LogInformation("[SERVER {ServerId}] Initial player sync complete - notifications enabled", serverId);
-            }
         }
         catch (Exception ex)
         {
