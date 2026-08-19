@@ -47,7 +47,7 @@ public class ModeratorController : ControllerBase
                 {
                     Id = m.Id,
                     Username = m.UserName ?? string.Empty,
-                    DisplayName = m.Nickname,
+                    DisplayName = m.DisplayName,
                     Email = m.Email,
                     IsActive = !m.isLoginBlocked,
                     CreatedAt = m.CreatedAt,
@@ -117,7 +117,7 @@ public class ModeratorController : ControllerBase
             {
                 UserName = dto.Username,
                 Email = dto.Email ?? $"{dto.Username}@moderator.local",
-                Nickname = dto.DisplayName,
+                DisplayName = dto.DisplayName,
                 SystemProfileId = profile.Id,
                 IsModerator = true,
                 isLoginBlocked = false,
@@ -150,7 +150,7 @@ public class ModeratorController : ControllerBase
             {
                 Id = moderator.Id,
                 Username = moderator.UserName ?? string.Empty,
-                DisplayName = moderator.Nickname,
+                DisplayName = moderator.DisplayName,
                 Email = moderator.Email,
                 IsActive = !moderator.isLoginBlocked,
                 LastLoginAt = moderator.LastLoginAt,
@@ -204,7 +204,7 @@ public class ModeratorController : ControllerBase
             }
 
             // Update moderator properties
-            moderator.Nickname = dto.DisplayName;
+            moderator.DisplayName = dto.DisplayName;
             moderator.Email = dto.Email;
             moderator.isLoginBlocked = !dto.IsActive;
 

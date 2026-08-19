@@ -155,7 +155,7 @@ public class PanelSettingsController : ControllerBase
     {
         try
         {
-            if (request.OlderThanDays < 1)
+            if (!request.Instant && request.OlderThanDays < 1)
                 return BadRequest(new { error = "OlderThanDays must be at least 1" });
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -172,7 +172,9 @@ public class PanelSettingsController : ControllerBase
                 .Select(s => s.Id)
                 .ToListAsync();
 
-            var cutoff = DateTime.UtcNow.AddDays(-request.OlderThanDays);
+            // When Instant is set, cutoff is "now" so every existing record older-than check
+            // still holds true for anything already in the database.
+            var cutoff = request.Instant ? DateTime.UtcNow : DateTime.UtcNow.AddDays(-request.OlderThanDays);
             int deleted = 0;
 
             switch (request.Category)
@@ -217,8 +219,9 @@ public class PanelSettingsController : ControllerBase
                     return BadRequest(new { error = $"Unknown or non-purgeable category: {request.Category}" });
             }
 
-            _logger.LogInformation("[PanelSettingsController] User {UserId} purged {Count} records from {Category} (older than {Days} days)",
-                userId, deleted, request.Category?.Replace("\r", "").Replace("\n", ""), request.OlderThanDays);
+            _logger.LogInformation("[PanelSettingsController] User {UserId} purged {Count} records from {Category} ({Scope})",
+                userId, deleted, request.Category?.Replace("\r", "").Replace("\n", ""),
+                request.Instant ? "instant - all records" : $"older than {request.OlderThanDays} days");
 
             return Ok(new { deleted, category = request.Category });
         }

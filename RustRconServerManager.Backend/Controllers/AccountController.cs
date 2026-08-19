@@ -42,7 +42,7 @@ namespace RustRconServerManager.Backend.Controllers
             return Ok(new
             {
                 Email = user.Email,
-                Nickname = user.Nickname,
+                DisplayName = user.DisplayName,
                 IsModerator = user.IsModerator,
                 isAdmin = user.isAdmin
             });
@@ -94,7 +94,7 @@ namespace RustRconServerManager.Backend.Controllers
             Account_AccountInformationDTO dto = new Account_AccountInformationDTO();
 
             dto.Email = accountInformation.Email;
-            dto.Nickname = accountInformation.Nickname;
+            dto.DisplayName = accountInformation.DisplayName;
             dto.CreatedAt = accountInformation.CreatedAt;
             dto.isAdmin = accountInformation.isAdmin;
             dto.IsModerator = accountInformation.IsModerator;
@@ -104,8 +104,35 @@ namespace RustRconServerManager.Backend.Controllers
             return Ok(dto);
         }
 
+        /// <summary>
+        /// Sets the current user's display name - shown across the panel (navbar, moderator
+        /// lists, audit log) instead of their email address. Required for every account.
+        /// </summary>
+        [HttpPut("DisplayName")]
+        public async Task<IActionResult> SetDisplayName([FromBody] Account_SetDisplayNameDTO dto)
+        {
+            var trimmed = dto.DisplayName?.Trim() ?? string.Empty;
 
+            if (string.IsNullOrEmpty(trimmed))
+                return BadRequest("Display name is required.");
 
+            if (trimmed.Length > 50)
+                return BadRequest("Display name must be 50 characters or fewer.");
 
+            var userEmail = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized("No email claim found");
+
+            var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Email == userEmail);
+
+            if (user == null)
+                return NotFound();
+
+            user.DisplayName = trimmed;
+            await _dbContext.SaveChangesAsync();
+
+            return Ok(new { DisplayName = user.DisplayName });
+        }
     }
 }

@@ -73,6 +73,11 @@ public class
             return BadRequest(new { message = "Passwords do not match" });
         }
 
+        if (string.IsNullOrWhiteSpace(model.DisplayName))
+        {
+            return BadRequest(new { message = "Display name is required" });
+        }
+
         // Get or create default SystemProfile
         var systemProfile = await _dbContext.SystemProfiles.FirstOrDefaultAsync();
         if (systemProfile == null)
@@ -108,6 +113,7 @@ public class
         {
             UserName = model.Email,
             Email = model.Email,
+            DisplayName = model.DisplayName.Trim(),
             SystemProfileId = systemProfile.Id,
             isAdmin = true,
             EmailConfirmed = true, // Auto-confirm email for initial admin

@@ -33,6 +33,11 @@ public class PurgeDataRequestDto
 {
     public string Category { get; set; } = string.Empty;
     public int OlderThanDays { get; set; }
+
+    /// <summary>
+    /// When true, deletes every record in the category immediately, ignoring OlderThanDays.
+    /// </summary>
+    public bool Instant { get; set; } = false;
 }
 
 public class SetLogLevelDto
