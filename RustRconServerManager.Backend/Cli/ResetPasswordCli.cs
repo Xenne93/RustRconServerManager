@@ -22,18 +22,18 @@ public static class ResetPasswordCli
         Console.WriteLine("RustRconServerManager - Password Reset");
         Console.WriteLine();
 
-        Console.Write("Account email: ");
-        var email = Console.ReadLine()?.Trim();
-        if (string.IsNullOrWhiteSpace(email))
+        Console.Write("Account username: ");
+        var username = Console.ReadLine()?.Trim();
+        if (string.IsNullOrWhiteSpace(username))
         {
-            Console.WriteLine("No email entered. Aborting.");
+            Console.WriteLine("No username entered. Aborting.");
             return 1;
         }
 
-        var user = await userManager.FindByEmailAsync(email);
+        var user = await userManager.FindByNameAsync(username);
         if (user == null)
         {
-            Console.WriteLine($"No account found for '{email}'.");
+            Console.WriteLine($"No account found for '{username}'.");
             return 1;
         }
 
@@ -99,7 +99,7 @@ public static class ResetPasswordCli
         }
 
         Console.WriteLine();
-        Console.WriteLine($"Password for '{email}' has been reset. Any existing sessions have been signed out.");
+        Console.WriteLine($"Password for '{username}' has been reset. Any existing sessions have been signed out.");
         return 0;
     }
 

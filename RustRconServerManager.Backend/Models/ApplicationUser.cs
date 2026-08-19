@@ -18,6 +18,14 @@ public class ApplicationUser:IdentityUser
     /// </summary>
     public string? DisplayName { get; set; }
     public string? Website { get; set; }
+
+    /// <summary>
+    /// True once this account has an explicitly chosen username (set at creation for every
+    /// account going forward). Accounts created before username-based login existed had
+    /// their username silently set equal to their email - this stays false for those until
+    /// they pick a real one via the one-time forced prompt (see MainLayout).
+    /// </summary>
+    public bool HasChosenUsername { get; set; } = false;
     public string? DiscordId { get; set; }
     public string? SteamId { get; set; }
     public string? SessionHash { get; set; } // Legacy single-session support, kept for backwards compatibility

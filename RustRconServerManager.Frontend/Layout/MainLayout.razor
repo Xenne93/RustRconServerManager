@@ -7,8 +7,10 @@
 @inject NavigationManager NavigationManager
 
 <div class="min-h-screen bg-[rgb(var(--body-bg))] flex flex-col">
-    @* Blocks the panel with a one-time modal for accounts created before display names
-       became mandatory, until they set one. *@
+    @* Blocks the panel with one-time modals for accounts created before username-based
+       login/mandatory display names existed, until they set one. Username first, since
+       RequireDisplayNameGate defers to it. *@
+    <RequireUsernameGate />
     <RequireDisplayNameGate />
 
     @* Top Navbar *@

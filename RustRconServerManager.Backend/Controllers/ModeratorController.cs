@@ -116,11 +116,13 @@ public class ModeratorController : ControllerBase
             var moderator = new ApplicationUser
             {
                 UserName = dto.Username,
-                Email = dto.Email ?? $"{dto.Username}@moderator.local",
+                Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email,
+                EmailConfirmed = !string.IsNullOrWhiteSpace(dto.Email),
                 DisplayName = dto.DisplayName,
                 SystemProfileId = profile.Id,
                 IsModerator = true,
                 isLoginBlocked = false,
+                HasChosenUsername = true,
                 CreatedAt = DateTime.UtcNow
             };
 

@@ -13,8 +13,31 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
 
-    <link rel="stylesheet" href="/css/tailwind-output.css">
-    <link rel="stylesheet" href="/css/app.css">
+    <!-- Recovers from a stylesheet request that fails outright (reported as "the page
+         sometimes loads unstyled until a refresh", most often after the browser/machine
+         has been idle for hours and the network hasn't fully reconnected yet when the tab
+         wakes up). A handful of retries with backoff, then fall back to a full reload,
+         which reliably recovers once connectivity is actually back. Defined before the
+         stylesheet links below so the handler exists before either link can start loading. -->
+    <script>
+        function handleStylesheetError(link) {
+            var count = (parseInt(link.getAttribute('data-retry-count') || '0', 10)) + 1;
+            link.setAttribute('data-retry-count', String(count));
+
+            if (count > 3) {
+                location.reload();
+                return;
+            }
+
+            var url = new URL(link.href, location.href);
+            url.searchParams.set('retry', Date.now());
+            setTimeout(function () {
+                link.href = url.toString();
+            }, 300 * count);
+        }
+    </script>
+    <link rel="stylesheet" href="/css/tailwind-output.css" onerror="handleStylesheetError(this)">
+    <link rel="stylesheet" href="/css/app.css" onerror="handleStylesheetError(this)">
     <link rel="icon" href="/favicon.png" type="image/png">
 
     <!-- Applies the stored/preferred theme before first paint, to avoid a flash of the

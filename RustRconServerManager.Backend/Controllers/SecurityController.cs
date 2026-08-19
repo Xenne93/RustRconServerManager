@@ -110,38 +110,15 @@ public class SecurityController : ControllerBase
                 return BadRequest(string.Join(", ", setEmailResult.Errors.Select(e => e.Description)));
             }
 
-            await _userManager.SetUserNameAsync(user, dto.NewEmail);
+            // Username is a separate, independent identifier now (login is by username,
+            // not email) - it must NOT be overwritten here.
             user.EmailConfirmed = true;
             await _userManager.UpdateAsync(user);
 
-            // The current session's JWT still carries the OLD email claim, and
-            // SecurityBindingMiddleware re-resolves the user by that claim on every
-            // request (including the frontend's follow-up logout call and even loading
-            // the login page itself) - once the email no longer matches any user, that
-            // middleware would 401 all of those with a raw, unstyled error response
-            // instead of letting the app load. Revoke the session and clear the cookie
-            // here so the browser has no stale credential left to send.
-            var tokenHash = User.FindFirst(System.Security.Claims.ClaimTypes.Hash)?.Value;
-            if (!string.IsNullOrEmpty(tokenHash))
-            {
-                var userSession = await _dbContext.UserSessions
-                    .FirstOrDefaultAsync(s => s.UserId == user.Id && s.SessionHash == tokenHash);
-                if (userSession != null)
-                {
-                    userSession.IsRevoked = true;
-                    await _dbContext.SaveChangesAsync();
-                }
-            }
-
-            Response.Cookies.Delete("rrsm_auth", new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = Request.IsHttps,
-                SameSite = SameSiteMode.Strict,
-                Path = "/"
-            });
-
-            return Ok(new { message = "Email changed successfully. Please log in again with your new email address." });
+            // Identity/session resolution is keyed on the user's Id (see GetUser(),
+            // SecurityBindingMiddleware), not email, so changing it doesn't invalidate the
+            // current session - no need to log the user out.
+            return Ok(new { message = "Email changed successfully." });
         }
         catch (Exception ex)
         {

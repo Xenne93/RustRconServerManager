@@ -53,6 +53,13 @@ else if (currentStep == SetupStep.AccountSetup)
 
                     <form class="text-center w-full">
                         <div class="mb-4">
+                            <label class="block text-left text-sm text-slate-300 mb-1">Username</label>
+                            <input @bind="username" @bind:event="oninput"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                                   type="text" placeholder="Used to log in" autocomplete="username" @onkeypress="HandleKeyPress" />
+                        </div>
+
+                        <div class="mb-4">
                             <label class="block text-left text-sm text-slate-300 mb-1">Display Name</label>
                             <input @bind="displayName" @bind:event="oninput"
                                    class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
@@ -60,10 +67,11 @@ else if (currentStep == SetupStep.AccountSetup)
                         </div>
 
                         <div class="mb-4">
-                            <label class="block text-left text-sm text-slate-300 mb-1">Email</label>
+                            <label class="block text-left text-sm text-slate-300 mb-1">Email <span class="text-slate-500">(optional)</span></label>
                             <input @bind="email" @bind:event="oninput"
                                    class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
                                    type="email" placeholder="admin@example.com" @onkeypress="HandleKeyPress" />
+                            <small class="text-slate-500 text-xs mt-1 block">Only needed for password-recovery emails. You can add or change it later.</small>
                         </div>
 
                         <div class="mb-4">
@@ -122,6 +130,7 @@ else if (currentStep == SetupStep.AccountSetup)
     private SetupStep currentStep = SetupStep.Welcome;
 
     private bool isProcessing = false;
+    private string username = string.Empty;
     private string email = string.Empty;
     private string displayName = string.Empty;
     private string password = string.Empty;
@@ -175,9 +184,9 @@ else if (currentStep == SetupStep.AccountSetup)
         successMessage = null;
 
         // Basic validation
-        if (string.IsNullOrWhiteSpace(email))
+        if (string.IsNullOrWhiteSpace(username))
         {
-            errorMessage = "Please enter an email address";
+            errorMessage = "Please enter a username";
             isProcessing = false;
             return;
         }
@@ -205,7 +214,8 @@ else if (currentStep == SetupStep.AccountSetup)
 
         var setupRequest = new Authorization_SetupRequestDTO
         {
-            Email = email,
+            Username = username,
+            Email = string.IsNullOrWhiteSpace(email) ? null : email,
             DisplayName = displayName,
             Password = password,
             ConfirmPassword = confirmPassword,

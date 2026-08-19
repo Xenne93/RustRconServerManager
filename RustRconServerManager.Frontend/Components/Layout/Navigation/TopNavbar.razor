@@ -136,7 +136,14 @@
                         {
                             <div class="px-3 py-2">
                                 <div class="text-sm text-white font-medium truncate">@(UserDisplayName ?? "Unknown")</div>
-                                <div class="text-xs text-slate-500 truncate"><i class="fas fa-envelope mr-1"></i>@(UserEmail ?? "Unknown")</div>
+                                @if (!string.IsNullOrEmpty(UserUsername))
+                                {
+                                    <div class="text-xs text-slate-500 truncate"><i class="fas fa-user mr-1"></i>@UserUsername</div>
+                                }
+                                @if (!string.IsNullOrEmpty(UserEmail))
+                                {
+                                    <div class="text-xs text-slate-500 truncate"><i class="fas fa-envelope mr-1"></i>@UserEmail</div>
+                                }
                             </div>
                             <TwDropdownSeparator />
                             @if (!IsModerator)
@@ -146,7 +153,7 @@
                                 </TwDropdownItem>
                             }
                             <TwDropdownItem Href="@NavHelper.GetUrl("Security")">
-                                <i class="fas fa-shield-alt text-xs mr-2"></i>Security
+                                <i class="fas fa-shield-alt text-xs mr-2"></i>Account Settings
                             </TwDropdownItem>
                             @if (!IsModerator)
                             {
@@ -178,6 +185,7 @@
     private bool IsLoading = true;
     private bool IsLoadingUserInfo = true;
     private string? UserEmail = null;
+    private string? UserUsername = null;
     private string? UserDisplayName = null;
     private bool IsModerator = false;
     private bool ActiveServerIsConnected => Servers?.FirstOrDefault(s => s.ServerId == ActiveServerId)?.IsConnected == true;
@@ -310,7 +318,8 @@
             var response = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Account/BasicInfo");
             if (response.ValueKind != System.Text.Json.JsonValueKind.Undefined)
             {
-                UserEmail = response.GetProperty("email").GetString();
+                UserEmail = response.TryGetProperty("email", out var em) ? em.GetString() : null;
+                UserUsername = response.TryGetProperty("username", out var un) ? un.GetString() : null;
                 UserDisplayName = response.TryGetProperty("displayName", out var dn) ? dn.GetString() : null;
                 IsModerator = response.GetProperty("isModerator").GetBoolean();
             }

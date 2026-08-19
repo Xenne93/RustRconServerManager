@@ -121,7 +121,11 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
         options.Password.RequireDigit = true;
         options.Password.RequiredLength = 6;
-        options.User.RequireUniqueEmail = true;
+        // Email is optional (login is by username) - RequireUniqueEmail would otherwise
+        // reject account creation entirely whenever no email is provided at all.
+        // Uniqueness among accounts that DO have one is still enforced manually where
+        // an email is set/changed (see AuthController.Setup, ModeratorController, SecurityController.ChangeEmail).
+        options.User.RequireUniqueEmail = false;
     })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();

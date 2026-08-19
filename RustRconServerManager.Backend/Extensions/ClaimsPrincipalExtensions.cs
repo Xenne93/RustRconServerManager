@@ -19,13 +19,13 @@ public static class ClaimsPrincipalExtensions
 
     public static async Task<ApplicationUser> GetUser(this ClaimsPrincipal user, AppDbContext context)
     {
-        var userEmail = user.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+        var userId = user.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
         var sessionHash = user.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Hash)?.Value;
 
-        if (string.IsNullOrWhiteSpace(userEmail) || string.IsNullOrWhiteSpace(sessionHash))
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(sessionHash))
             throw new UserNotAuthenticatedException();
 
-        return await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail)
+        return await context.Users.FirstOrDefaultAsync(u => u.Id == userId)
             ?? throw new UserNotAuthenticatedException();
     }
 
