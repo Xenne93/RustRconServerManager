@@ -1,19 +1,20 @@
-@* Blocks the panel with a non-dismissible modal until the current user has a display name set.
-   Only ever triggers for accounts created before display names became mandatory. *@
+@* Blocks the panel with a non-dismissible modal until the current user has explicitly
+   chosen a username (login moved from email to username). Only ever triggers for accounts
+   created before that existed, whose username was silently set equal to their email. *@
 @using RustRconServerManager.Shared.Account
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 
-@if (needsDisplayName)
+@if (needsUsername)
 {
     <TwModal IsOpen="true" Title="One more thing" ShowCloseButton="false" CloseOnBackdropClick="false" ZIndexClass="z-[60]">
         <ChildContent>
             <p class="text-slate-300 text-sm mb-4">
-                Please choose a display name. It's shown across the panel (navbar, moderator lists, audit log) instead of your email address.
+                Please choose a username. You'll use it to log in from now on instead of your email address.
             </p>
 
             <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
-                   @bind="displayName" @bind:event="oninput" maxlength="50" placeholder="How you'll appear across the panel" />
+                   @bind="username" @bind:event="oninput" maxlength="50" placeholder="Used to log in" autocomplete="username" />
 
             @if (errorMessage != null)
             {
@@ -27,8 +28,8 @@
 }
 
 @code {
-    private bool needsDisplayName = false;
-    private string displayName = string.Empty;
+    private bool needsUsername = false;
+    private string username = string.Empty;
     private bool isSaving = false;
     private string? errorMessage;
 
@@ -37,25 +38,20 @@
         try
         {
             var info = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Account/BasicInfo");
-            var currentDisplayName = info.TryGetProperty("displayName", out var dn) ? dn.GetString() : null;
             var hasChosenUsername = info.TryGetProperty("hasChosenUsername", out var hcu) && hcu.GetBoolean();
-
-            // Defer to RequireUsernameGate if that one still needs to show too - avoids both
-            // mandatory gates trying to render at once. It'll show right after that one is
-            // satisfied and forces its own reload.
-            needsDisplayName = string.IsNullOrWhiteSpace(currentDisplayName) && hasChosenUsername;
+            needsUsername = !hasChosenUsername;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[RequireDisplayNameGate] Error checking display name: {ex.Message}");
+            Console.WriteLine($"[RequireUsernameGate] Error checking username: {ex.Message}");
         }
     }
 
     private async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(displayName))
+        if (string.IsNullOrWhiteSpace(username))
         {
-            errorMessage = "Please enter a display name.";
+            errorMessage = "Please enter a username.";
             return;
         }
 
@@ -64,13 +60,13 @@
             isSaving = true;
             errorMessage = null;
 
-            var response = await Http.PutAsJsonAsync("/api/Account/DisplayName", new Account_SetDisplayNameDTO { DisplayName = displayName });
+            var response = await Http.PutAsJsonAsync("/api/Account/Username", new Account_SetUsernameDTO { Username = username });
 
             if (response.IsSuccessStatusCode)
             {
-                needsDisplayName = false;
-                // Force a full reload so the navbar (and anything else that already
-                // fetched BasicInfo before the display name existed) picks it up.
+                needsUsername = false;
+                // Force a full reload so anything that already fetched BasicInfo before
+                // the username existed (navbar, the display-name gate) picks it up.
                 NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
             }
             else

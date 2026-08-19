@@ -3,7 +3,8 @@ namespace RustRconServerManager.Shared.Account;
 public class Account_AccountInformationDTO
 {
 
-    public string Email { get; set; }
+    public string? Email { get; set; }
+    public string? Username { get; set; }
     public string? DisplayName { get; set; }
     public string? Theme { get; set; }
     public bool isAdmin { get; set; }

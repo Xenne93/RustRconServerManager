@@ -29,12 +29,12 @@ namespace RustRconServerManager.Backend.Controllers
         [HttpGet("BasicInfo")]
         public IActionResult GetBasicInfo()
         {
-            var userEmail = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
 
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized("No email claim found");
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("No user claim found");
 
-            var user = _dbContext.Users.Where(x => x.Email == userEmail).FirstOrDefault();
+            var user = _dbContext.Users.Where(x => x.Id == userId).FirstOrDefault();
 
             if (user == null)
                 return NotFound();
@@ -42,7 +42,9 @@ namespace RustRconServerManager.Backend.Controllers
             return Ok(new
             {
                 Email = user.Email,
+                Username = user.UserName,
                 DisplayName = user.DisplayName,
+                HasChosenUsername = user.HasChosenUsername,
                 IsModerator = user.IsModerator,
                 isAdmin = user.isAdmin
             });
@@ -54,12 +56,12 @@ namespace RustRconServerManager.Backend.Controllers
         [HttpGet("SelectedServerId")]
         public IActionResult GetSelectedServerId()
         {
-            var userEmail = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
 
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized("No email claim found");
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("No user claim found");
 
-            var user = _dbContext.Users.Where(x => x.Email == userEmail).FirstOrDefault();
+            var user = _dbContext.Users.Where(x => x.Id == userId).FirstOrDefault();
 
             if (user == null)
                 return NotFound();
@@ -77,12 +79,12 @@ namespace RustRconServerManager.Backend.Controllers
         public IActionResult AccountInformation()
         {
 
-            var userEmail = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
 
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized("No email claim found");
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("No user claim found");
 
-            var accountInformation = _dbContext.Users.Where(x => x.Email == userEmail).FirstOrDefault();
+            var accountInformation = _dbContext.Users.Where(x => x.Id == userId).FirstOrDefault();
 
             if (accountInformation == null)
                 return NotFound();
@@ -94,6 +96,7 @@ namespace RustRconServerManager.Backend.Controllers
             Account_AccountInformationDTO dto = new Account_AccountInformationDTO();
 
             dto.Email = accountInformation.Email;
+            dto.Username = accountInformation.UserName;
             dto.DisplayName = accountInformation.DisplayName;
             dto.CreatedAt = accountInformation.CreatedAt;
             dto.isAdmin = accountInformation.isAdmin;
@@ -119,12 +122,12 @@ namespace RustRconServerManager.Backend.Controllers
             if (trimmed.Length > 50)
                 return BadRequest("Display name must be 50 characters or fewer.");
 
-            var userEmail = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
 
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized("No email claim found");
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("No user claim found");
 
-            var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Email == userEmail);
+            var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId);
 
             if (user == null)
                 return NotFound();
@@ -133,6 +136,46 @@ namespace RustRconServerManager.Backend.Controllers
             await _dbContext.SaveChangesAsync();
 
             return Ok(new { DisplayName = user.DisplayName });
+        }
+
+        /// <summary>
+        /// Sets the current user's username (used to log in instead of an email address).
+        /// Required for every account going forward - existing accounts created before
+        /// username-based login existed had it silently set equal to their email, and are
+        /// prompted once to pick a real one (see MainLayout's RequireUsernameGate).
+        /// </summary>
+        [HttpPut("Username")]
+        public async Task<IActionResult> SetUsername([FromBody] Account_SetUsernameDTO dto)
+        {
+            var trimmed = dto.Username?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrEmpty(trimmed))
+                return BadRequest("Username is required.");
+
+            if (trimmed.Length > 50)
+                return BadRequest("Username must be 50 characters or fewer.");
+
+            var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("No user claim found");
+
+            var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user == null)
+                return NotFound();
+
+            var existing = await _dbContext.Users
+                .FirstOrDefaultAsync(x => x.NormalizedUserName == trimmed.ToUpperInvariant() && x.Id != userId);
+            if (existing != null)
+                return BadRequest("That username is already taken.");
+
+            user.UserName = trimmed;
+            user.NormalizedUserName = trimmed.ToUpperInvariant();
+            user.HasChosenUsername = true;
+            await _dbContext.SaveChangesAsync();
+
+            return Ok(new { Username = user.UserName });
         }
     }
 }

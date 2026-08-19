@@ -6,10 +6,9 @@
 @using RustRconServerManager.Frontend.Services
 @inject HttpClient Http
 @inject IJSRuntime JS
-@inject NavigationHelper NavHelper
 @attribute [Authorize]
 
-<PageTitleRow>Security Settings</PageTitleRow>
+<PageTitleRow>Account Settings</PageTitleRow>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Account Information Card -->
@@ -24,6 +23,17 @@
 
         <div class="space-y-4">
             <div>
+                <label class="block text-sm text-slate-300 mb-1">Username</label>
+                <div class="flex gap-2">
+                    <input type="text" class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="username" maxlength="50" autocomplete="username" />
+                    <TwButton Variant="secondary" OnClick="SaveUsername" IsLoading="@isSavingUsername">Save</TwButton>
+                </div>
+                <small class="text-slate-500 text-xs mt-1 block">Used to log in instead of your email address.</small>
+            </div>
+
+            <hr class="border-slate-700/50" />
+
+            <div>
                 <label class="block text-sm text-slate-300 mb-1">Display Name</label>
                 <div class="flex gap-2">
                     <input type="text" class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="displayName" maxlength="50" />
@@ -36,11 +46,11 @@
 
             <div>
                 <label class="block text-sm text-slate-300 mb-1">Current Email</label>
-                <input type="email" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-slate-400 cursor-not-allowed" value="@currentEmail" readonly />
+                <input type="email" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-slate-400 cursor-not-allowed" value="@(string.IsNullOrEmpty(currentEmail) ? "(none set)" : currentEmail)" readonly />
             </div>
 
             <div>
-                <label class="block text-sm text-slate-300 mb-1">New Email</label>
+                <label class="block text-sm text-slate-300 mb-1">New Email <span class="text-slate-500">(optional)</span></label>
                 <input type="email" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="changeEmailDto.NewEmail" placeholder="new@example.com" />
             </div>
 
@@ -52,7 +62,7 @@
             <TwButton Variant="primary" OnClick="ChangeEmail" IsLoading="@isChangingEmail">
                 Change Email
             </TwButton>
-            <small class="text-slate-500 text-xs block">You'll be logged out and need to sign in again with your new email.</small>
+            <small class="text-slate-500 text-xs block">Only needed for password-recovery emails - not required to use the panel.</small>
         </div>
     </TwCard>
 
@@ -215,6 +225,7 @@
     private bool isChangingPassword = false;
     private bool isChangingEmail = false;
     private bool isSavingDisplayName = false;
+    private bool isSavingUsername = false;
     private bool isEnabling2FA = false;
     private bool isDisabling2FA = false;
 
@@ -226,6 +237,7 @@
     private bool accountError;
 
     private string currentEmail = string.Empty;
+    private string username = string.Empty;
     private string displayName = string.Empty;
 
     private string qrCodeUri = string.Empty;
@@ -243,7 +255,8 @@
         try
         {
             var info = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Account/BasicInfo");
-            currentEmail = info.GetProperty("email").GetString() ?? string.Empty;
+            currentEmail = info.TryGetProperty("email", out var em) ? em.GetString() ?? string.Empty : string.Empty;
+            username = info.TryGetProperty("username", out var un) ? un.GetString() ?? string.Empty : string.Empty;
             displayName = info.TryGetProperty("displayName", out var dn) ? dn.GetString() ?? string.Empty : string.Empty;
         }
         catch (Exception ex)
@@ -283,6 +296,37 @@
         }
     }
 
+    private async Task SaveUsername()
+    {
+        try
+        {
+            isSavingUsername = true;
+            accountMessage = null;
+
+            var response = await Http.PutAsJsonAsync("/api/Account/Username", new Account_SetUsernameDTO { Username = username });
+
+            if (response.IsSuccessStatusCode)
+            {
+                accountMessage = "Username updated successfully!";
+                accountError = false;
+            }
+            else
+            {
+                accountMessage = await response.Content.ReadAsStringAsync();
+                accountError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            accountMessage = $"Error: {ex.Message}";
+            accountError = true;
+        }
+        finally
+        {
+            isSavingUsername = false;
+        }
+    }
+
     private async Task ChangeEmail()
     {
         try
@@ -294,15 +338,10 @@
 
             if (response.IsSuccessStatusCode)
             {
-                accountMessage = "Email changed successfully! Logging you out...";
+                accountMessage = "Email changed successfully!";
                 accountError = false;
                 changeEmailDto = new();
-
-                // The backend already revoked this session and cleared the auth cookie
-                // as part of the email change itself - calling /api/Auth/logout here
-                // would just fail, since the (now stale) credential it needs is already gone.
-                await Task.Delay(2000);
-                NavHelper.NavigateTo("login", true);
+                await LoadAccountInfo();
             }
             else
             {

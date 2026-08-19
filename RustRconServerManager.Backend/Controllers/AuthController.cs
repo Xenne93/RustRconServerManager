@@ -78,6 +78,11 @@ public class
             return BadRequest(new { message = "Display name is required" });
         }
 
+        if (string.IsNullOrWhiteSpace(model.Username))
+        {
+            return BadRequest(new { message = "Username is required" });
+        }
+
         // Get or create default SystemProfile
         var systemProfile = await _dbContext.SystemProfiles.FirstOrDefaultAsync();
         if (systemProfile == null)
@@ -111,12 +116,13 @@ public class
         // Create the admin user
         var user = new ApplicationUser
         {
-            UserName = model.Email,
-            Email = model.Email,
+            UserName = model.Username.Trim(),
+            Email = string.IsNullOrWhiteSpace(model.Email) ? null : model.Email.Trim(),
             DisplayName = model.DisplayName.Trim(),
             SystemProfileId = systemProfile.Id,
             isAdmin = true,
-            EmailConfirmed = true, // Auto-confirm email for initial admin
+            EmailConfirmed = !string.IsNullOrWhiteSpace(model.Email), // Auto-confirm email for initial admin, if one was provided
+            HasChosenUsername = true,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -229,12 +235,12 @@ public class
     {
         // Get the token hash from claims
         var tokenHash = User.FindFirst(System.Security.Claims.ClaimTypes.Hash)?.Value;
-        var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-        if (string.IsNullOrEmpty(tokenHash) || string.IsNullOrEmpty(userEmail))
+        if (string.IsNullOrEmpty(tokenHash) || string.IsNullOrEmpty(userId))
             return BadRequest("Missing token information");
 
-        var user = await _userManager.FindByEmailAsync(userEmail);
+        var user = await _userManager.FindByIdAsync(userId);
         if (user == null)
             return NotFound("User not found");
 
@@ -259,11 +265,11 @@ public class
     public async Task<IActionResult> LogoutAll()
     {
         // Logout from all devices/browsers
-        var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-        if (string.IsNullOrEmpty(userEmail))
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
             return BadRequest("Missing user information");
 
-        var user = await _userManager.FindByEmailAsync(userEmail);
+        var user = await _userManager.FindByIdAsync(userId);
         if (user == null)
             return NotFound("User not found");
 
@@ -345,7 +351,7 @@ public class
     [HttpPost("login")]
     public async Task<IActionResult> Login(Authorization_UserLoginDTO model)
     {
-        var user = await _userManager.FindByEmailAsync(model.Email);
+        var user = await _userManager.FindByNameAsync(model.Username);
         if (user == null)
             return Unauthorized(new Authorization_LoginResponseDTO
             {
@@ -623,15 +629,22 @@ public class
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var userAgent = Request.Headers["User-Agent"].ToString() ?? "unknown";
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Name, user.UserName ?? user.Id),
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim("ip", ipAddress),
             new Claim("ua", userAgent),
             new Claim(ClaimTypes.Version, "1.0"),
             new Claim(ClaimTypes.Hash, sessionHash)
         };
+
+        // Email is optional now - only include the claim when the account actually has one,
+        // since a Claim's value can't be null.
+        if (!string.IsNullOrEmpty(user.Email))
+        {
+            claims.Add(new Claim(ClaimTypes.Email, user.Email));
+        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

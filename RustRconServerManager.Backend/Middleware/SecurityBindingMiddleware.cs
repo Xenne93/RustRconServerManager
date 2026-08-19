@@ -44,17 +44,17 @@ public class SecurityBindingMiddleware
                 return;
             }
 
-            var userEmail = user.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value;
+            var userId = user.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var tokenHash = user.FindFirst(System.Security.Claims.ClaimTypes.Hash)?.Value;
 
-            if (string.IsNullOrEmpty(userEmail) || string.IsNullOrEmpty(tokenHash))
+            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(tokenHash))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsync("Unauthorized: Missing claims.");
                 return;
             }
 
-            var dbUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
+            var dbUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (dbUser == null)
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;

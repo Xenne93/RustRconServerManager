@@ -56,7 +56,7 @@ public class LiveChatHub : Hub
         {
             ServerId = currentServerId,
             Username = Context.User?.Identity?.Name
-                       ?? Context.User?.FindFirstValue(ClaimTypes.Email)
+                       ?? Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
                        ?? "Unknown",
             SteamId = null, // Voeg hier je eigen logica toe als je SteamId kunt resolven
             Message = message.Trim(),

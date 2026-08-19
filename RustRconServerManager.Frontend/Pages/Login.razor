@@ -36,9 +36,9 @@
                     @if (!requires2FA)
                     {
                         <div class="mb-4">
-                            <input @bind="email" @bind:event="oninput"
+                            <input @bind="username" @bind:event="oninput"
                                    class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
-                                   type="email" name="email" placeholder="Email" @onkeypress="HandleKeyPress" />
+                                   type="text" name="username" placeholder="Username" autocomplete="username" @onkeypress="HandleKeyPress" />
                         </div>
                         <div class="mb-4">
                             <input @bind="password" @bind:event="oninput"
@@ -53,10 +53,10 @@
                             Two-factor authentication required
                         </div>
                         <div class="mb-4">
-                            <label class="block text-left text-sm text-slate-300 mb-1">Email</label>
-                            <input @bind="email"
+                            <label class="block text-left text-sm text-slate-300 mb-1">Username</label>
+                            <input @bind="username"
                                    class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-400 cursor-not-allowed"
-                                   type="email" readonly />
+                                   type="text" readonly />
                         </div>
 
                         <div class="mb-4">
@@ -106,7 +106,7 @@
 @code {
     private bool isLoggingIn = false;
     private bool requires2FA = false;
-    private string email = string.Empty;
+    private string username = string.Empty;
     private string password = string.Empty;
     private string twoFactorCode = string.Empty;
     private string? errorMessage;
@@ -154,7 +154,7 @@
 
         var loginDto = new Authorization_UserLoginDTO
         {
-            Email = email,
+            Username = username,
             Password = password,
             TwoFactorCode = requires2FA ? twoFactorCode : null
         };

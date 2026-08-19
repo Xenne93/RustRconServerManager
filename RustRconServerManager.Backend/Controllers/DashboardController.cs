@@ -234,7 +234,7 @@ namespace RustRconServerManager.Backend.Controllers
                DateTime? expiryDate = banExpiredAt == now ? null : banExpiredAt;
 
                // Get current user email for audit trail
-               var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System";
+               var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "System";
 
                // Create PlayerBan record (single source of truth for bans)
                // If global ban, use ServerId = -1
@@ -445,7 +445,7 @@ namespace RustRconServerManager.Backend.Controllers
                if (banRecord == null && globalBan == null)
                    return NotFound("Ban record not found");
 
-               var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System";
+               var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "System";
                var now = DateTime.UtcNow;
 
                if (globalBan != null)
@@ -873,7 +873,7 @@ namespace RustRconServerManager.Backend.Controllers
                    _logger.LogInformation("[GLOBAL UNBAN] Toggling off global ban for {SteamId}. Unbanning from all servers...", ban.SteamId?.Replace("\r", "").Replace("\n", ""));
 
                    // Get current user email for audit trail
-                   var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System";
+                   var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "System";
                    var now = DateTime.UtcNow;
 
                    // Find all bans for this player with the note indicating they're from a global ban
@@ -960,7 +960,7 @@ namespace RustRconServerManager.Backend.Controllers
                }
 
                // Get current user email for audit trail
-               var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System";
+               var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "System";
                var now = DateTime.UtcNow;
 
                // If this is a global ban, unban from all servers
@@ -1100,7 +1100,7 @@ namespace RustRconServerManager.Backend.Controllers
                        return Unauthorized();
                }
 
-               var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System";
+               var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "System";
                var now = DateTime.UtcNow;
 
                // Calculate new expiry
