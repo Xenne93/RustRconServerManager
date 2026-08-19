@@ -127,6 +127,12 @@
                                                         }
                                                         Purge
                                                     </button>
+                                                    <button class="bg-red-500/30 hover:bg-red-500/40 text-red-300 text-xs font-medium px-3 py-1 rounded transition-colors disabled:opacity-50"
+                                                            title="Delete all @FormatCategoryName(entry.Category).ToLower() records right now"
+                                                            disabled="@(purgingCategory == entry.Category)"
+                                                            @onclick="() => PurgeDataInstant(entry.Category)">
+                                                        <i class="fas fa-bolt mr-1"></i>Delete All Now
+                                                    </button>
                                                 </div>
                                             }
                                             else if (!entry.CanPurge)
@@ -671,6 +677,50 @@
                 var result = await response.Content.ReadFromJsonAsync<JsonElement>();
                 var deleted = result.GetProperty("deleted").GetInt32();
                 purgeSuccessMessage = $"Successfully purged {deleted:N0} {FormatCategoryName(category).ToLower()} records older than {days} days.";
+
+                // Refresh stats
+                await LoadDatabaseStats();
+
+                // Clear message after 5 seconds
+                _ = Task.Delay(5000).ContinueWith(_ => { purgeSuccessMessage = ""; InvokeAsync(StateHasChanged); });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error purging data: {ex.Message}");
+        }
+        finally
+        {
+            purgingCategory = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PurgeDataInstant(string category)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            $"Delete ALL {FormatCategoryName(category).ToLower()} records right now? This cannot be undone.");
+
+        if (!confirmed)
+            return;
+
+        try
+        {
+            purgingCategory = category;
+            purgeSuccessMessage = "";
+
+            var request = new PurgeDataRequestDto { Category = category, Instant = true };
+
+            var response = await Http.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "/api/panelsettings/purge-data")
+            {
+                Content = JsonContent.Create(request)
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+                var deleted = result.GetProperty("deleted").GetInt32();
+                purgeSuccessMessage = $"Successfully deleted all {deleted:N0} {FormatCategoryName(category).ToLower()} records.";
 
                 // Refresh stats
                 await LoadDatabaseStats();

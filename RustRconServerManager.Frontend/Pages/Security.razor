@@ -1,14 +1,61 @@
 @page "/Security"
 @using Microsoft.AspNetCore.Authorization
 @using RustRconServerManager.Frontend.Components.Page
+@using RustRconServerManager.Shared.Account
 @using RustRconServerManager.Shared.Security
+@using RustRconServerManager.Frontend.Services
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject NavigationHelper NavHelper
 @attribute [Authorize]
 
 <PageTitleRow>Security Settings</PageTitleRow>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Account Information Card -->
+    <TwCard HeaderTitle="Account Information">
+        @if (!string.IsNullOrEmpty(accountMessage))
+        {
+            <div class="rounded-lg px-4 py-3 mb-4 text-sm flex items-center justify-between @(accountError ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400")">
+                <span>@accountMessage</span>
+                <button class="ml-2 hover:opacity-70" @onclick="() => accountMessage = null"><i class="fas fa-times"></i></button>
+            </div>
+        }
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">Display Name</label>
+                <div class="flex gap-2">
+                    <input type="text" class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="displayName" maxlength="50" />
+                    <TwButton Variant="secondary" OnClick="SaveDisplayName" IsLoading="@isSavingDisplayName">Save</TwButton>
+                </div>
+                <small class="text-slate-500 text-xs mt-1 block">Shown across the panel instead of your email address.</small>
+            </div>
+
+            <hr class="border-slate-700/50" />
+
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">Current Email</label>
+                <input type="email" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-slate-400 cursor-not-allowed" value="@currentEmail" readonly />
+            </div>
+
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">New Email</label>
+                <input type="email" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="changeEmailDto.NewEmail" placeholder="new@example.com" />
+            </div>
+
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">Current Password</label>
+                <input type="password" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors" @bind="changeEmailDto.CurrentPassword" placeholder="Confirm with your current password" />
+            </div>
+
+            <TwButton Variant="primary" OnClick="ChangeEmail" IsLoading="@isChangingEmail">
+                Change Email
+            </TwButton>
+            <small class="text-slate-500 text-xs block">You'll be logged out and need to sign in again with your new email.</small>
+        </div>
+    </TwCard>
+
     <!-- Change Password Card -->
     <TwCard HeaderTitle="Change Password">
         @if (!string.IsNullOrEmpty(passwordMessage))
@@ -157,6 +204,7 @@
 
 @code {
     private Security_ChangePasswordDTO changePasswordDto = new();
+    private Security_ChangeEmailDTO changeEmailDto = new();
     private Security_Enable2FADTO enable2FADto = new();
     private Security_Disable2FADTO disable2FADto = new();
 
@@ -165,6 +213,8 @@
     private bool show2FASetup = false;
     private bool showDisable2FA = false;
     private bool isChangingPassword = false;
+    private bool isChangingEmail = false;
+    private bool isSavingDisplayName = false;
     private bool isEnabling2FA = false;
     private bool isDisabling2FA = false;
 
@@ -172,6 +222,11 @@
     private bool passwordError;
     private string? twoFactorMessage;
     private bool twoFactorError;
+    private string? accountMessage;
+    private bool accountError;
+
+    private string currentEmail = string.Empty;
+    private string displayName = string.Empty;
 
     private string qrCodeUri = string.Empty;
     private string manualEntryKey = string.Empty;
@@ -180,6 +235,90 @@
     protected override async Task OnInitializedAsync()
     {
         await Load2FAStatus();
+        await LoadAccountInfo();
+    }
+
+    private async Task LoadAccountInfo()
+    {
+        try
+        {
+            var info = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Account/BasicInfo");
+            currentEmail = info.GetProperty("email").GetString() ?? string.Empty;
+            displayName = info.TryGetProperty("displayName", out var dn) ? dn.GetString() ?? string.Empty : string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading account info: {ex.Message}");
+        }
+    }
+
+    private async Task SaveDisplayName()
+    {
+        try
+        {
+            isSavingDisplayName = true;
+            accountMessage = null;
+
+            var response = await Http.PutAsJsonAsync("/api/Account/DisplayName", new Account_SetDisplayNameDTO { DisplayName = displayName });
+
+            if (response.IsSuccessStatusCode)
+            {
+                accountMessage = "Display name updated successfully!";
+                accountError = false;
+            }
+            else
+            {
+                accountMessage = await response.Content.ReadAsStringAsync();
+                accountError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            accountMessage = $"Error: {ex.Message}";
+            accountError = true;
+        }
+        finally
+        {
+            isSavingDisplayName = false;
+        }
+    }
+
+    private async Task ChangeEmail()
+    {
+        try
+        {
+            isChangingEmail = true;
+            accountMessage = null;
+
+            var response = await Http.PostAsJsonAsync("/api/Security/change-email", changeEmailDto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                accountMessage = "Email changed successfully! Logging you out...";
+                accountError = false;
+                changeEmailDto = new();
+
+                // The backend already revoked this session and cleared the auth cookie
+                // as part of the email change itself - calling /api/Auth/logout here
+                // would just fail, since the (now stale) credential it needs is already gone.
+                await Task.Delay(2000);
+                NavHelper.NavigateTo("login", true);
+            }
+            else
+            {
+                accountMessage = await response.Content.ReadAsStringAsync();
+                accountError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            accountMessage = $"Error: {ex.Message}";
+            accountError = true;
+        }
+        finally
+        {
+            isChangingEmail = false;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

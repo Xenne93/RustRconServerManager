@@ -443,7 +443,7 @@ public class DiscordWebhookService : IDiscordWebhookService
 
             // Text message format - use custom text content if provided, otherwise default
             var textMessage = string.IsNullOrWhiteSpace(settings.ServerOfflineTextContent)
-                ? $"ðŸ”´ **{serverName}** is offline!"
+                ? $"🔴 **{serverName}** is offline!"
                 : ReplaceVariables(settings.ServerOfflineTextContent, variables);
 
             // Default embed format
@@ -453,13 +453,13 @@ public class DiscordWebhookService : IDiscordWebhookService
                 {
                     new
                     {
-                        title = "ðŸ”´ Server Offline",
+                        title = "🔴 Server Offline",
                         description = $"**{serverName}** is no longer reachable",
                         color = 15158332, // Red
                         fields = new[]
                         {
                             new { name = "Server", value = serverName, inline = true },
-                            new { name = "Status", value = "âŒ Offline", inline = true },
+                            new { name = "Status", value = "❌ Offline", inline = true },
                             new { name = "Time", value = $"<t:{timestamp}:F>", inline = false }
                         },
                         footer = new { text = "Server Status Monitor" },
@@ -528,7 +528,7 @@ public class DiscordWebhookService : IDiscordWebhookService
 
             // Text message format - use custom text content if provided, otherwise default
             var textMessage = string.IsNullOrWhiteSpace(settings.ServerOnlineTextContent)
-                ? $"âœ… **{serverName}** is back online! (Downtime: {downtimeText})"
+                ? $"✅ **{serverName}** is back online! (Downtime: {downtimeText})"
                 : ReplaceVariables(settings.ServerOnlineTextContent, variables);
 
             // Default embed format
@@ -538,13 +538,13 @@ public class DiscordWebhookService : IDiscordWebhookService
                 {
                     new
                     {
-                        title = "âœ… Server Online",
+                        title = "✅ Server Online",
                         description = $"**{serverName}** is back online!",
                         color = 3066993, // Green
                         fields = new[]
                         {
                             new { name = "Server", value = serverName, inline = true },
-                            new { name = "Status", value = "âœ… Online", inline = true },
+                            new { name = "Status", value = "✅ Online", inline = true },
                             new { name = "Downtime", value = downtimeText, inline = false },
                             new { name = "Back Online At", value = $"<t:{timestamp}:F>", inline = false }
                         },
@@ -856,13 +856,13 @@ public class DiscordWebhookService : IDiscordWebhookService
                         {
                             new
                             {
-                                title = "ðŸ”´ Server Offline (TEST)",
+                                title = "🔴 Server Offline (TEST)",
                                 description = $"**{serverName}** is no longer reachable",
                                 color = 15158332,
                                 fields = new[]
                                 {
                                     new { name = "Server", value = serverName, inline = true },
-                                    new { name = "Status", value = "âŒ Offline", inline = true },
+                                    new { name = "Status", value = "❌ Offline", inline = true },
                                     new { name = "Time", value = $"<t:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}:F>", inline = false }
                                 },
                                 footer = new { text = "Server Status Monitor" },
@@ -870,7 +870,7 @@ public class DiscordWebhookService : IDiscordWebhookService
                             }
                         }
                     },
-                    $"ðŸ”´ **{serverName}** is offline!"
+                    $"🔴 **{serverName}** is offline!"
                 ),
 
                 WebhookEventType.ServerOnline => (
@@ -889,13 +889,13 @@ public class DiscordWebhookService : IDiscordWebhookService
                         {
                             new
                             {
-                                title = "âœ… Server Online (TEST)",
+                                title = "✅ Server Online (TEST)",
                                 description = $"**{serverName}** is back online!",
                                 color = 3066993,
                                 fields = new[]
                                 {
                                     new { name = "Server", value = serverName, inline = true },
-                                    new { name = "Status", value = "âœ… Online", inline = true },
+                                    new { name = "Status", value = "✅ Online", inline = true },
                                     new { name = "Downtime", value = "15 minutes", inline = false },
                                     new { name = "Back Online At", value = $"<t:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}:F>", inline = false }
                                 },
@@ -904,7 +904,7 @@ public class DiscordWebhookService : IDiscordWebhookService
                             }
                         }
                     },
-                    $"âœ… **{serverName}** is back online! (Downtime: 15 minutes)"
+                    $"✅ **{serverName}** is back online! (Downtime: 15 minutes)"
                 ),
 
                 WebhookEventType.ServerProtection => (

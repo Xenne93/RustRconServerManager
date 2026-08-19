@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using RustRconServerManager.Backend.Database;
 using RustRconServerManager.Backend.Extensions;
 using RustRconServerManager.Backend.Models;
 using RustRconServerManager.Backend.Helpers;
 using RustRconServerManager.Shared.Security;
+using System.Net.Mail;
 using System.Text;
 using System.Text.Encodings.Web;
 
@@ -75,6 +77,75 @@ public class SecurityController : ControllerBase
         catch (Exception ex)
         {
             return BadRequest(ApiErrorHelper.FormatError("Failed to change password", ex));
+        }
+    }
+
+    [HttpPost("change-email")]
+    public async Task<IActionResult> ChangeEmail([FromBody] Security_ChangeEmailDTO dto)
+    {
+        try
+        {
+            var user = await User.GetUser(_dbContext);
+
+            if (string.IsNullOrWhiteSpace(dto.NewEmail) || !MailAddress.TryCreate(dto.NewEmail, out _))
+            {
+                return BadRequest("A valid email address is required.");
+            }
+
+            var passwordValid = await _userManager.CheckPasswordAsync(user, dto.CurrentPassword);
+            if (!passwordValid)
+            {
+                return BadRequest("Current password is incorrect.");
+            }
+
+            var existingUser = await _userManager.FindByEmailAsync(dto.NewEmail);
+            if (existingUser != null && existingUser.Id != user.Id)
+            {
+                return BadRequest("This email address is already in use.");
+            }
+
+            var setEmailResult = await _userManager.SetEmailAsync(user, dto.NewEmail);
+            if (!setEmailResult.Succeeded)
+            {
+                return BadRequest(string.Join(", ", setEmailResult.Errors.Select(e => e.Description)));
+            }
+
+            await _userManager.SetUserNameAsync(user, dto.NewEmail);
+            user.EmailConfirmed = true;
+            await _userManager.UpdateAsync(user);
+
+            // The current session's JWT still carries the OLD email claim, and
+            // SecurityBindingMiddleware re-resolves the user by that claim on every
+            // request (including the frontend's follow-up logout call and even loading
+            // the login page itself) - once the email no longer matches any user, that
+            // middleware would 401 all of those with a raw, unstyled error response
+            // instead of letting the app load. Revoke the session and clear the cookie
+            // here so the browser has no stale credential left to send.
+            var tokenHash = User.FindFirst(System.Security.Claims.ClaimTypes.Hash)?.Value;
+            if (!string.IsNullOrEmpty(tokenHash))
+            {
+                var userSession = await _dbContext.UserSessions
+                    .FirstOrDefaultAsync(s => s.UserId == user.Id && s.SessionHash == tokenHash);
+                if (userSession != null)
+                {
+                    userSession.IsRevoked = true;
+                    await _dbContext.SaveChangesAsync();
+                }
+            }
+
+            Response.Cookies.Delete("rrsm_auth", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Strict,
+                Path = "/"
+            });
+
+            return Ok(new { message = "Email changed successfully. Please log in again with your new email address." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiErrorHelper.FormatError("Failed to change email", ex));
         }
     }
 

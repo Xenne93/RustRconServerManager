@@ -1,11 +1,16 @@
 @inherits LayoutComponentBase
 @using RustRconServerManager.Frontend.Components.Layout.Navigation
 @using RustRconServerManager.Frontend.Components
+@using RustRconServerManager.Frontend.Components.Account
 @using RustRconServerManager.Frontend.Components.Footer
 @using Microsoft.AspNetCore.Components
 @inject NavigationManager NavigationManager
 
 <div class="min-h-screen bg-[rgb(var(--body-bg))] flex flex-col">
+    @* Blocks the panel with a one-time modal for accounts created before display names
+       became mandatory, until they set one. *@
+    <RequireDisplayNameGate />
+
     @* Top Navbar *@
     <TopNavbar OnMobileMenuToggle="ToggleMobileSidebar" />
 

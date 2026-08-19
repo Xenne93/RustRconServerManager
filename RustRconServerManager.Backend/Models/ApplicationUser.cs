@@ -10,7 +10,13 @@ public class ApplicationUser:IdentityUser
 
     public SystemProfile SystemProfile { get; set; }
     public string Theme { get; set; } = "light";
-    public string? Nickname { get; set; }
+
+    /// <summary>
+    /// Name shown across the panel (navbar, moderator lists, audit log) instead of the
+    /// email address. Required for every account going forward - existing accounts created
+    /// before this field existed are prompted to set one on next login (see MainLayout).
+    /// </summary>
+    public string? DisplayName { get; set; }
     public string? Website { get; set; }
     public string? DiscordId { get; set; }
     public string? SteamId { get; set; }

@@ -53,6 +53,13 @@ else if (currentStep == SetupStep.AccountSetup)
 
                     <form class="text-center w-full">
                         <div class="mb-4">
+                            <label class="block text-left text-sm text-slate-300 mb-1">Display Name</label>
+                            <input @bind="displayName" @bind:event="oninput"
+                                   class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                                   type="text" placeholder="How you'll appear across the panel" @onkeypress="HandleKeyPress" />
+                        </div>
+
+                        <div class="mb-4">
                             <label class="block text-left text-sm text-slate-300 mb-1">Email</label>
                             <input @bind="email" @bind:event="oninput"
                                    class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
@@ -116,6 +123,7 @@ else if (currentStep == SetupStep.AccountSetup)
 
     private bool isProcessing = false;
     private string email = string.Empty;
+    private string displayName = string.Empty;
     private string password = string.Empty;
     private string confirmPassword = string.Empty;
     private string? errorMessage;
@@ -174,6 +182,13 @@ else if (currentStep == SetupStep.AccountSetup)
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            errorMessage = "Please enter a display name";
+            isProcessing = false;
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(password))
         {
             errorMessage = "Please enter a password";
@@ -191,6 +206,7 @@ else if (currentStep == SetupStep.AccountSetup)
         var setupRequest = new Authorization_SetupRequestDTO
         {
             Email = email,
+            DisplayName = displayName,
             Password = password,
             ConfirmPassword = confirmPassword,
             EnableAnonymousAnalytics = enableAnonymousAnalytics

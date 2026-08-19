@@ -2,7 +2,7 @@
 
 @if (IsOpen)
 {
-    <div class="fixed inset-0 z-40" @onclick="HandleBackdropClick">
+    <div class="fixed inset-0 @ZIndexClass" @onclick="HandleBackdropClick">
         @* Backdrop *@
         <div class="tw-modal-backdrop"></div>
 
@@ -52,6 +52,13 @@
     [Parameter] public bool CloseOnBackdropClick { get; set; } = true;
     [Parameter] public string Size { get; set; } = "default";
     [Parameter] public string? MaxHeight { get; set; }
+
+    /// <summary>
+    /// Tailwind z-index class for the backdrop/modal wrapper. Raise this above the default
+    /// for modals that must take priority over other in-app modals (e.g. mandatory
+    /// account-setup gates that should block onboarding dialogs, not stack behind them).
+    /// </summary>
+    [Parameter] public string ZIndexClass { get; set; } = "z-40";
 
     public async Task Open()
     {

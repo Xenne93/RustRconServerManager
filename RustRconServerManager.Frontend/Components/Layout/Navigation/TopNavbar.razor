@@ -119,7 +119,7 @@
                             <i class="fas fa-user text-sm"></i>
                         </div>
                         <span class="hidden sm:block text-sm">
-                            @(IsLoadingUserInfo ? "Loading..." : (UserEmail ?? "Admin"))
+                            @(IsLoadingUserInfo ? "Loading..." : (UserDisplayName ?? UserEmail ?? "Admin"))
                         </span>
                         <i class="fas fa-chevron-down text-xs"></i>
                     </button>
@@ -134,8 +134,9 @@
                         }
                         else
                         {
-                            <div class="px-3 py-2 text-xs text-slate-500">
-                                <i class="fas fa-envelope mr-1"></i>@(UserEmail ?? "Unknown")
+                            <div class="px-3 py-2">
+                                <div class="text-sm text-white font-medium truncate">@(UserDisplayName ?? "Unknown")</div>
+                                <div class="text-xs text-slate-500 truncate"><i class="fas fa-envelope mr-1"></i>@(UserEmail ?? "Unknown")</div>
                             </div>
                             <TwDropdownSeparator />
                             @if (!IsModerator)
@@ -177,6 +178,7 @@
     private bool IsLoading = true;
     private bool IsLoadingUserInfo = true;
     private string? UserEmail = null;
+    private string? UserDisplayName = null;
     private bool IsModerator = false;
     private bool ActiveServerIsConnected => Servers?.FirstOrDefault(s => s.ServerId == ActiveServerId)?.IsConnected == true;
 
@@ -309,6 +311,7 @@
             if (response.ValueKind != System.Text.Json.JsonValueKind.Undefined)
             {
                 UserEmail = response.GetProperty("email").GetString();
+                UserDisplayName = response.TryGetProperty("displayName", out var dn) ? dn.GetString() : null;
                 IsModerator = response.GetProperty("isModerator").GetBoolean();
             }
         }

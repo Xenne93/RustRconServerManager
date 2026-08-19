@@ -1,0 +1,85 @@
+@* Blocks the panel with a non-dismissible modal until the current user has a display name set.
+   Only ever triggers for accounts created before display names became mandatory. *@
+@using RustRconServerManager.Shared.Account
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+@if (needsDisplayName)
+{
+    <TwModal IsOpen="true" Title="One more thing" ShowCloseButton="false" CloseOnBackdropClick="false" ZIndexClass="z-[60]">
+        <ChildContent>
+            <p class="text-slate-300 text-sm mb-4">
+                Please choose a display name. It's shown across the panel (navbar, moderator lists, audit log) instead of your email address.
+            </p>
+
+            <input type="text" class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
+                   @bind="displayName" @bind:event="oninput" maxlength="50" placeholder="How you'll appear across the panel" />
+
+            @if (errorMessage != null)
+            {
+                <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm mt-3">@errorMessage</div>
+            }
+        </ChildContent>
+        <FooterContent>
+            <TwButton Variant="primary" OnClick="Save" IsLoading="@isSaving">Save</TwButton>
+        </FooterContent>
+    </TwModal>
+}
+
+@code {
+    private bool needsDisplayName = false;
+    private string displayName = string.Empty;
+    private bool isSaving = false;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var info = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/Account/BasicInfo");
+            var currentDisplayName = info.TryGetProperty("displayName", out var dn) ? dn.GetString() : null;
+            needsDisplayName = string.IsNullOrWhiteSpace(currentDisplayName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RequireDisplayNameGate] Error checking display name: {ex.Message}");
+        }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            errorMessage = "Please enter a display name.";
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+
+            var response = await Http.PutAsJsonAsync("/api/Account/DisplayName", new Account_SetDisplayNameDTO { DisplayName = displayName });
+
+            if (response.IsSuccessStatusCode)
+            {
+                needsDisplayName = false;
+                // Force a full reload so the navbar (and anything else that already
+                // fetched BasicInfo before the display name existed) picks it up.
+                NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
+            }
+            else
+            {
+                errorMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}
