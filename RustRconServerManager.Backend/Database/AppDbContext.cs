@@ -47,6 +47,9 @@ namespace RustRconServerManager.Backend.Database
         // Database set for panel settings
         public DbSet<PanelSettings> PanelSettings { get; set; }
 
+        // Database set for AI provider configuration (Ollama/LM Studio/OpenAI/Anthropic/Universal)
+        public DbSet<AiIntegrationSettings> AiIntegrationSettings { get; set; }
+
         // Database set for user sessions (multi-session support)
         public DbSet<UserSession> UserSessions { get; set; }
 

@@ -1,0 +1,378 @@
+@page "/ai-integration"
+@using Microsoft.AspNetCore.Authorization
+@using RustRconServerManager.Frontend.Components.Layout
+@using RustRconServerManager.Shared.AiIntegration
+@using System.Net.Http.Json
+@inject HttpClient Http
+@attribute [Authorize]
+
+<ContentWrapper>
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+        <div>
+            <h3 class="text-xl font-semibold text-white">AI Integration</h3>
+            <p class="text-slate-400 text-sm mt-1">Connect an AI provider for server monitoring, script/mod troubleshooting, rule-breaker detection, and admin notifications.</p>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-12">
+            <div class="tw-spinner w-8 h-8 mx-auto"></div>
+        </div>
+    }
+    else if (forbidden)
+    {
+        <TwCard>
+            <div class="text-center py-8 text-slate-400">
+                <i class="fas fa-lock text-2xl mb-3"></i>
+                <p>Only admins can configure AI integration.</p>
+            </div>
+        </TwCard>
+    }
+    else
+    {
+        <div class="max-w-2xl">
+            <TwCard HeaderTitle="Provider Configuration" HeaderIcon="fas fa-robot">
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3 rounded-lg bg-blue-500/5 border border-blue-500/20 px-4 py-3">
+                        <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                        <p class="text-sm text-slate-300">
+                            This is the connection the panel's AI-powered features will use. Nothing is sent to the
+                            provider unless a specific AI feature actually calls it - saving this configuration alone
+                            doesn't send any data anywhere.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Provider</label>
+                        <select class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500"
+                                @bind="provider" @bind:after="OnProviderChanged">
+                            <option value="@AiProviders.OpenAI">OpenAI</option>
+                            <option value="@AiProviders.Anthropic">Anthropic</option>
+                            <option value="@AiProviders.Ollama">Ollama</option>
+                            <option value="@AiProviders.LmStudio">LM Studio</option>
+                            <option value="@AiProviders.Universal">Universal (OpenAI-compatible)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">
+                            Base URL @(RequiresBaseUrl ? "" : "(optional)")
+                        </label>
+                        <input type="text" @bind="baseUrl" @bind:event="oninput"
+                               class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                               placeholder="@BaseUrlPlaceholder" />
+                        @if (!RequiresBaseUrl)
+                        {
+                            <small class="text-slate-500 text-xs mt-1 block">Leave blank to use the default @provider API endpoint.</small>
+                        }
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Model</label>
+                        <input type="text" @bind="model" @bind:event="oninput"
+                               class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                               placeholder="@ModelPlaceholder" />
+                    </div>
+
+                    <hr class="border-slate-700/50" />
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-slate-300">API Key</span>
+                        @if (apiKeyConfigured)
+                        {
+                            <span class="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400">Configured</span>
+                        }
+                        else
+                        {
+                            <span class="px-2 py-0.5 text-xs rounded-full bg-slate-500/20 text-slate-400">Not configured</span>
+                        }
+                    </div>
+
+                    <div>
+                        <input type="password" @bind="apiKeyInput" @bind:event="oninput"
+                               class="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 placeholder-slate-500"
+                               placeholder="@(apiKeyConfigured ? "Leave empty to keep current key" : ApiKeyPlaceholder)" />
+                        @if (!RequiresApiKey)
+                        {
+                            <small class="text-slate-500 text-xs mt-1 block">Usually not needed for a local @(provider == AiProviders.Ollama ? "Ollama" : "LM Studio") install unless it sits behind an authenticated proxy.</small>
+                        }
+                    </div>
+
+                    <hr class="border-slate-700/50" />
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-slate-300">Enable AI integration</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" @bind="isEnabled" class="sr-only peer" />
+                            <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                        </label>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                                @onclick="SaveSettings" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                            }
+                            <i class="fas fa-save mr-1.5"></i>Save
+                        </button>
+                        <button class="border border-slate-600 text-slate-300 hover:bg-slate-700 font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                                @onclick="TestConnection" disabled="@(isTesting || isSaving)">
+                            @if (isTesting)
+                            {
+                                <span class="tw-spinner mr-2" style="width: 14px; height: 14px;"></span>
+                            }
+                            <i class="fas fa-plug mr-1.5"></i>Test Connection
+                        </button>
+                        @if (apiKeyConfigured)
+                        {
+                            <button class="border border-red-500/30 text-red-400 hover:bg-red-500/10 font-medium py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50"
+                                    @onclick="RemoveApiKey" disabled="@isSaving">
+                                <i class="fas fa-trash-alt mr-1.5"></i>Remove Key
+                            </button>
+                        }
+                    </div>
+
+                    @if (errorMessage != null)
+                    {
+                        <div class="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 text-sm">@errorMessage</div>
+                    }
+                    @if (!string.IsNullOrEmpty(successMessage))
+                    {
+                        <div class="rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2 text-sm">@successMessage</div>
+                    }
+                    @if (testResultMessage != null)
+                    {
+                        <div class="rounded-lg px-3 py-2 text-sm @(testResultSuccess ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" : "bg-red-500/10 border border-red-500/30 text-red-400")">@testResultMessage</div>
+                    }
+                </div>
+            </TwCard>
+        </div>
+    }
+</ContentWrapper>
+
+@code {
+    private bool isLoading = true;
+    private bool forbidden = false;
+    private bool isSaving = false;
+    private bool isTesting = false;
+
+    private string provider = AiProviders.OpenAI;
+    private string baseUrl = string.Empty;
+    private string model = string.Empty;
+    private bool isEnabled = false;
+    private string apiKeyInput = string.Empty;
+    private bool apiKeyConfigured = false;
+
+    private string? errorMessage;
+    private string? successMessage;
+    private string? testResultMessage;
+    private bool testResultSuccess;
+
+    private bool RequiresBaseUrl => provider is AiProviders.Ollama or AiProviders.LmStudio or AiProviders.Universal;
+    private bool RequiresApiKey => provider is AiProviders.OpenAI or AiProviders.Anthropic;
+
+    private string BaseUrlPlaceholder => provider switch
+    {
+        AiProviders.Ollama => "http://localhost:11434",
+        AiProviders.LmStudio => "http://localhost:1234",
+        AiProviders.Universal => "https://your-provider.example.com",
+        AiProviders.OpenAI => "https://api.openai.com (default)",
+        AiProviders.Anthropic => "https://api.anthropic.com (default)",
+        _ => ""
+    };
+
+    private string ModelPlaceholder => provider switch
+    {
+        AiProviders.OpenAI => "gpt-4o",
+        AiProviders.Anthropic => "claude-sonnet-4-5-20250929",
+        AiProviders.Ollama => "llama3.1",
+        AiProviders.LmStudio => "local-model",
+        _ => "model-name"
+    };
+
+    private string ApiKeyPlaceholder => RequiresApiKey ? "Enter your API key" : "Enter your API key (if required)";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSettings();
+    }
+
+    private async Task LoadSettings()
+    {
+        try
+        {
+            isLoading = true;
+            var response = await Http.GetAsync("/api/AiIntegration/settings");
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                forbidden = true;
+                return;
+            }
+
+            var settings = await response.Content.ReadFromJsonAsync<AiIntegrationSettingsDto>();
+            if (settings != null)
+            {
+                provider = settings.Provider;
+                baseUrl = settings.BaseUrl ?? string.Empty;
+                model = settings.Model ?? string.Empty;
+                isEnabled = settings.IsEnabled;
+                apiKeyConfigured = settings.ApiKeyConfigured;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading settings: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OnProviderChanged()
+    {
+        // A base URL typed for one provider almost never makes sense for another - clear it
+        // so switching providers doesn't accidentally save a stale/wrong endpoint.
+        baseUrl = string.Empty;
+    }
+
+    private async Task SaveSettings()
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            errorMessage = "Please enter a model name.";
+            return;
+        }
+
+        if (RequiresBaseUrl && string.IsNullOrWhiteSpace(baseUrl))
+        {
+            errorMessage = "Base URL is required for this provider.";
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+            successMessage = null;
+            testResultMessage = null;
+
+            var dto = new SetAiIntegrationSettingsDto
+            {
+                Provider = provider,
+                BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl.Trim(),
+                Model = model.Trim(),
+                IsEnabled = isEnabled,
+                ApiKey = string.IsNullOrWhiteSpace(apiKeyInput) ? null : apiKeyInput.Trim()
+            };
+
+            var response = await Http.PutAsJsonAsync("/api/AiIntegration/settings", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var settings = await response.Content.ReadFromJsonAsync<AiIntegrationSettingsDto>();
+                apiKeyConfigured = settings?.ApiKeyConfigured ?? apiKeyConfigured;
+                apiKeyInput = string.Empty;
+                successMessage = "Settings saved successfully!";
+            }
+            else
+            {
+                errorMessage = await ReadErrorMessage(response);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task RemoveApiKey()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+            successMessage = null;
+
+            var dto = new SetAiIntegrationSettingsDto
+            {
+                Provider = provider,
+                BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl.Trim(),
+                Model = string.IsNullOrWhiteSpace(model) ? "unset" : model.Trim(),
+                IsEnabled = isEnabled,
+                RemoveApiKey = true
+            };
+
+            var response = await Http.PutAsJsonAsync("/api/AiIntegration/settings", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                apiKeyConfigured = false;
+                apiKeyInput = string.Empty;
+                successMessage = "API key removed.";
+            }
+            else
+            {
+                errorMessage = await ReadErrorMessage(response);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task TestConnection()
+    {
+        try
+        {
+            isTesting = true;
+            testResultMessage = null;
+
+            var response = await Http.PostAsync("/api/AiIntegration/test", null);
+            var result = await response.Content.ReadFromJsonAsync<TestAiConnectionResultDto>();
+
+            testResultSuccess = result?.Success ?? false;
+            testResultMessage = result?.Message ?? "No response from server.";
+        }
+        catch (Exception ex)
+        {
+            testResultSuccess = false;
+            testResultMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isTesting = false;
+        }
+    }
+
+    private static async Task<string> ReadErrorMessage(HttpResponseMessage response)
+    {
+        try
+        {
+            var doc = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            if (doc.TryGetProperty("error", out var err))
+            {
+                return err.GetString() ?? "An error occurred.";
+            }
+        }
+        catch
+        {
+            // Fall through
+        }
+
+        return "An error occurred.";
+    }
+}

@@ -63,6 +63,8 @@ builder.Services.AddScoped<IPlayerProtectionService, PlayerProtectionService>();
 // Register Discord Webhook Service (for Discord event notifications)
 builder.Services.AddHttpClient<IDiscordWebhookService, DiscordWebhookService>();
 
+builder.Services.AddHttpClient<IAiService, AiService>();
+
 // Register Email Service (for sending password recovery emails via local SMTP)
 builder.Services.AddScoped<IEmailService, EmailService>();
 

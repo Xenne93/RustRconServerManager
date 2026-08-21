@@ -7,9 +7,11 @@
 @using System.Net.Http.Json
 @using System.Text.Json
 @using RustRconServerManager.Shared.Scheduler
+@using RustRconServerManager.Frontend.Services
 @inject ILocalStorageService LocalStorage
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject NavigationHelper NavHelper
 @inject IJSRuntime JSRuntime
 @implements IAsyncDisposable
 
@@ -304,6 +306,20 @@
                     }
                 </div>
             </TwCard>
+            <!-- AI Integration Card -->
+            <TwCard HeaderTitle="AI Integration" HeaderIcon="fas fa-robot">
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3 rounded-lg bg-blue-500/5 border border-blue-500/20 px-4 py-3">
+                        <i class="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                        <p class="text-sm text-slate-300">Connect an AI provider (Ollama, LM Studio, OpenAI, Anthropic, or a custom OpenAI-compatible endpoint) for server monitoring, script/mod troubleshooting, rule-breaker detection, and admin notifications.</p>
+                    </div>
+
+                    <a href="@NavHelper.GetUrl("ai-integration")" class="flex items-center justify-center gap-2 w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm no-underline">
+                        <i class="fas fa-robot"></i>Open AI Integration
+                    </a>
+                </div>
+            </TwCard>
+
             <!-- Anonymous Analytics Card -->
             <TwCard HeaderTitle="Anonymous Usage Statistics" HeaderIcon="fas fa-chart-simple">
                 <div class="space-y-4">
